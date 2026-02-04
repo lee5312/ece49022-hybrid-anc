@@ -1,0 +1,43 @@
+# Build outputs
+build/
+.pio/
+*.o
+*.elf
+*.bin
+*.hex
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+
+# KiCad
+*-backups/
+*.kicad_prl
+fp-info-cache
+
+# Gerbers (keep final versions, ignore temp)
+hardware/gerbers/temp/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Compiled docs
+docs/*.pdf
+
+# Calibration data (large files)
+*.hmap
+hmap_raw/
