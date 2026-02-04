@@ -66,11 +66,17 @@
 
 | Component | Qty | Est. Price | Source | Notes |
 |-----------|-----|------------|--------|-------|
-| **3D Printed Enclosure** | - | $0-20 | Bechtel/Lab | If available |
-| **Headband/Mount** | 1 | $15 | Amazon | Modify existing headphones? |
+| **3M Earmuff (플라스틱 헤드밴드)** | 1 | $10-15 | Amazon | ⚠️ 금속 NO - UWB 간섭 방지 |
+| **3D Printed Enclosure** | - | $0-20 | Bechtel/Lab | PCB 하우징 |
 | **Velcro/Mounting Hardware** | 1 | $5 | Amazon | - |
 
-**Subtotal: ~$40**
+> ⚠️ **이어머프 선택 기준:**
+> - 헤드밴드: 플라스틱/나일론 (금속 X)
+> - 조절부: 금속 없는 것
+> - 이어컵: 금속 그릴 없는 것
+> - 검색어: "plastic headband earmuff hearing protection"
+
+**Subtotal: ~$35**
 
 ---
 
@@ -82,10 +88,10 @@
 | Audio | $33 |
 | Analog Circuit | $50 |
 | Power & Misc | $73 |
-| Enclosure | $40 |
-| **TOTAL** | **~$281** |
+| Enclosure | $35 |
+| **TOTAL** | **~$276** |
 
-**Per person (4 members): ~$70**
+**Per person (4 members): ~$69**
 
 ---
 
