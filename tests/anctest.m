@@ -1,230 +1,121 @@
-clear; clc; close all;
+clear; close all; clc;
 
-%% ---------------- USER SETTINGS ----------------
-toolWav   = "tool_noise.wav";   % tool recording
-speechWav = "speech.wav";       % speech recording (should NOT be cancelled)
+%% Setup
+fs = 48000;
+T = 2.0;
+t = (0:1/fs:T-1/fs)';
 
-% Desired tool-to-speech SNR (tool louder than speech by this many dB)
-desiredSNR_dB = 10;             % try 5, 10, 15 (bigger = speech harder to hear)
+% Tool tone 
+f0 = 1000; % tool frequency
+A = 1.0;
+phi = deg2rad(45);
 
-% Simulated digital path latency (ADC+MCU+DAC etc.)
-digitalDelay_us = 200;          % try 50, 100, 200, 500
+% Speech/ambient (uncorrelated with 1kHz references)
+fspeech = 300;
+Aspeech = 0.3;
 
-% Tool band where cancellation is focused (tune these!)
-toolBandLow_Hz  = 2000;
-toolBandHigh_Hz = 12000;
+% References from MCU (I and Q at f0)
+I = sin(2*pi*f0*t);
+Q = cos(2*pi*f0*t);
 
-% Speech band used to check “don’t cancel speech”
-speechBandLow_Hz  = 300;
-speechBandHigh_Hz = 3400;
+% Cal mic: correlated tool tone + uncorrelated speech
+tool = A*sin(2*pi*f0*t + phi);
+speech = Aspeech*sin(2*pi*fspeech*t);
+d_mic = tool + speech;
 
-% Analog phase correction range (your spec)
-phaseRange_deg = 45;
-phaseStep_deg  = 1;
+%% Error WITHOUT subsystem
+e_no = d_mic;
 
-% Window used for metrics (seconds)
-measureWindow_s = 0.10;         % 100 ms
+%% Error WITH subsystem 
+mu = 0.001; % (Time constant of Integrator)
+wI = 0; wQ = 0;
+y = zeros(size(t));
+e = zeros(size(t));
 
-% Listen?
-doListen = true;
+for n = 1:length(t)
+    y(n) = wI*I(n) + wQ*Q(n); % generated anti-noise estimate
+    e(n) = d_mic(n) - y(n); % residual seen by cal mic (has both residual tool noise + speech)
 
-%% ---------------- LOAD AUDIO ----------------
-[xTool, fs] = audioread(toolWav);
-if size(xTool,2) > 1, xTool = mean(xTool,2); end
-xTool = xTool / (max(abs(xTool)) + 1e-12);
-
-[xSp, fs2] = audioread(speechWav);
-if size(xSp,2) > 1, xSp = mean(xSp,2); end
-
-% --- FIX 1: resample speech if sample rates differ ---
-if fs2 ~= fs
-    xSp = resample(xSp, fs, fs2);
-    fprintf("Resampled speech from %d Hz to %d Hz\n", fs2, fs);
+    % LMS update (find weights that minimize residual)
+    wI = wI + mu * e(n) * I(n);
+    wQ = wQ + mu * e(n) * Q(n);
 end
-xSp = xSp / (max(abs(xSp)) + 1e-12);
+e_yes = e;
 
-% Match lengths (loop speech if shorter)
-N = length(xTool);
-if length(xSp) < N
-    reps = ceil(N / length(xSp));
-    xSp = repmat(xSp, reps, 1);
-end
-xSp = xSp(1:N);
+%% Lock-in measurement at tool frequency (1kHz)
+win = round(0.02*fs); % 20 ms moving-average LPF window
 
-% Limit to a manageable duration (first 8 seconds)
-maxLen_s = 8;
-Nmax = min(N, round(maxLen_s*fs));
-xTool = xTool(1:Nmax);
-xSp   = xSp(1:Nmax);
+AI_no = movmean(e_no .* I, win);
+AQ_no = movmean(e_no .* Q, win);
+Acorr_tool_no = 2*sqrt(AI_no.^2 + AQ_no.^2);
 
-%% ---------------- CONTROLLED MIX: tool + speech ----------------
-% --- FIX 2: set a controlled SNR so speech is audible and comparisons are meaningful ---
-tool   = xTool / (rms(xTool) + 1e-12);
-speech = xSp   / (rms(xSp)   + 1e-12);
+AI_yes = movmean(e_yes .* I, win);
+AQ_yes = movmean(e_yes .* Q, win);
+Acorr_tool_yes = 2*sqrt(AI_yes.^2 + AQ_yes.^2);
 
-% Make tool louder than speech by desiredSNR_dB
-tool = tool * 10^(desiredSNR_dB/20);
+%% Lock-in measurement at speech frequency (300Hz)
+Is = sin(2*pi*fspeech*t);
+Qs = cos(2*pi*fspeech*t);
 
-% Mic signal (ear mic hears tool + speech)
-mic = tool + speech;
+AsI_no = movmean(e_no .* Is, win);
+AsQ_no = movmean(e_no .* Qs, win);
+Acorr_speech_no = 2*sqrt(AsI_no.^2 + AsQ_no.^2);
 
-t = (0:length(mic)-1)'/fs;
+AsI_yes = movmean(e_yes .* Is, win);
+AsQ_yes = movmean(e_yes .* Qs, win);
+Acorr_speech_yes = 2*sqrt(AsI_yes.^2 + AsQ_yes.^2);
 
-%% ---------------- FILTERS (band split) ----------------
-bpTool = designfilt('bandpassiir','FilterOrder',4, ...
-    'HalfPowerFrequency1',toolBandLow_Hz, ...
-    'HalfPowerFrequency2',toolBandHigh_Hz, ...
-    'SampleRate',fs);
-
-lpTool = designfilt('lowpassiir','FilterOrder',4, ...
-    'HalfPowerFrequency',toolBandLow_Hz, 'SampleRate',fs);
-
-bpSpeech = designfilt('bandpassiir','FilterOrder',4, ...
-    'HalfPowerFrequency1',speechBandLow_Hz, ...
-    'HalfPowerFrequency2',speechBandHigh_Hz, ...
-    'SampleRate',fs);
-
-%% ---------------- DIGITAL ANTI-NOISE (tool-targeted, with latency) ----------------
-% IMPORTANT: anti-noise is derived ONLY from the tool component (not speech)
-antiIdeal = -tool;
-
-% Simulate latency in the digital chain
-delaySamp = round((digitalDelay_us*1e-6) * fs);
-delaySamp = min(delaySamp, length(antiIdeal)-1); % safety
-antiDigital = [zeros(delaySamp,1); antiIdeal(1:end-delaySamp)];
-
-% Ear result with digital-only ANC
-ear_digitalOnly = mic + antiDigital;
-
-%% ---------------- ANALOG PHASE FIX (HF tool band only) ----------------
-% Analog block: split antiDigital into LF + HF(tool band), shift HF only, recombine.
-antiLF = filtfilt(lpTool, antiDigital);
-antiHF = filtfilt(bpTool, antiDigital);
-
-% Representative center frequency for phase correction (can be replaced by peak estimate)
-f0 = sqrt(toolBandLow_Hz * toolBandHigh_Hz);
-
-% Quick sanity print: phase error at f0 caused by digital delay
-phaseErr_deg = 360 * f0 * (digitalDelay_us*1e-6);
-fprintf("Delay %d us at f0=%.0f Hz -> phase error ~ %.1f deg (wraps modulo 360)\n", ...
-    digitalDelay_us, f0, phaseErr_deg);
-
-% Measurement window (avoid filter transients)
-winLen = max(1, round(measureWindow_s * fs));
-midIdx = floor(length(mic)/2);
-winIdx = (midIdx - floor(winLen/2)) : (midIdx + ceil(winLen/2) - 1);
-winIdx = max(winIdx, 1);
-winIdx = min(winIdx, length(mic));
-
-% Fractional delay helper (for phase shift simulation)
-fracDelay = @(sig, dSamp) interp1((1:length(sig))', sig, (1:length(sig))' - dSamp, 'linear', 0);
-
-% Sweep phase settings to minimize residual TOOL-band energy at the ear
-phases = (-phaseRange_deg:phaseStep_deg:phaseRange_deg)';
-residualToolPower = zeros(size(phases));
-
-for k = 1:length(phases)
-    phi = phases(k);
-
-    % --- FIX 3: flip sign so correction can ADVANCE (lead) to compensate latency ---
-    % Convert phase at f0 into time shift: phi = 360*f0*tau  => tau = phi/(360*f0)
-    % We use tau = -phi/(360*f0) so positive phi can act like "lead" depending on convention.
-    tau = -phi / (360 * f0);  % seconds
-    dS  = tau * fs;           % samples (fractional allowed)
-
-    antiHF_shift = fracDelay(antiHF, dS);
-    antiAnalogFixed = antiLF + antiHF_shift;
-
-    ear_fixed = mic + antiAnalogFixed;
-
-    % Metric: residual power in TOOL band
-    earToolBand = filtfilt(bpTool, ear_fixed);
-    residualToolPower(k) = mean(earToolBand(winIdx).^2);
-end
-
-% Best phase
-[~, bestIdx] = min(residualToolPower);
-bestPhase = phases(bestIdx);
-
-% Build best corrected output
-tauBest = -bestPhase / (360 * f0);
-dSbest  = tauBest * fs;
-antiHF_best = fracDelay(antiHF, dSbest);
-antiAnalogFixed_best = antiLF + antiHF_best;
-ear_fixedBest = mic + antiAnalogFixed_best;
-
-%% ---------------- METRICS: tool attenuation + speech preservation ----------------
-% Tool-band RMS before/after (in window)
-micToolBand = filtfilt(bpTool, mic);
-digToolBand = filtfilt(bpTool, ear_digitalOnly);
-fixToolBand = filtfilt(bpTool, ear_fixedBest);
-
-rmsMicTool = rms(micToolBand(winIdx));
-rmsDigTool = rms(digToolBand(winIdx));
-rmsFixTool = rms(fixToolBand(winIdx));
-
-toolAttnDig_dB = 20*log10((rmsMicTool+1e-12)/(rmsDigTool+1e-12));
-toolAttnFix_dB = 20*log10((rmsMicTool+1e-12)/(rmsFixTool+1e-12));
-
-% Speech-band impact (we WANT near 0 dB change ideally)
-micSpeechBand = filtfilt(bpSpeech, mic);
-digSpeechBand = filtfilt(bpSpeech, ear_digitalOnly);
-fixSpeechBand = filtfilt(bpSpeech, ear_fixedBest);
-
-rmsMicSp = rms(micSpeechBand(winIdx));
-rmsDigSp = rms(digSpeechBand(winIdx));
-rmsFixSp = rms(fixSpeechBand(winIdx));
-
-speechChangeDig_dB = 20*log10((rmsDigSp+1e-12)/(rmsMicSp+1e-12));
-speechChangeFix_dB = 20*log10((rmsFixSp+1e-12)/(rmsMicSp+1e-12));
-
-%% ---------------- PLOTS ----------------
+%% Plot 1: Correlated amplitude at tool vs speech 
 figure;
-plot(phases, 10*log10(residualToolPower + 1e-18), 'LineWidth', 1.5);
+plot(t, Acorr_tool_no, 'r', 'LineWidth', 1.4); hold on;
+plot(t, Acorr_tool_yes,'b', 'LineWidth', 1.4);
+plot(t, Acorr_speech_no,'--r','LineWidth', 1.2);
+plot(t, Acorr_speech_yes,'--b','LineWidth', 1.2);
 grid on;
-xlabel('HF phase correction (deg)');
-ylabel('Residual TOOL-band power (dB)');
-title(sprintf('Phase sweep (tool band %d–%d Hz, f0=%.0f Hz) | Best = %d°', ...
-    toolBandLow_Hz, toolBandHigh_Hz, f0, bestPhase));
+xlabel('Time (s)');
+ylabel('Estimated correlated amplitude');
+title('Tool (1kHz) is minimized while speech (300Hz) is preserved');
+legend('Tool @1kHz (no cancel)','Tool @1kHz (cancel)', ...
+       'Speech @300Hz (no cancel)','Speech @300Hz (cancel)', ...
+       'Location','best');
+
+%% Plot 2: Raw waveforms 
+figure;
+subplot(3,1,1);
+plot(t, d_mic); grid on;
+title('Calibration mic signal: tool + speech');
+ylabel('Amplitude');
+
+subplot(3,1,2);
+plot(t, y); grid on;
+title('Generated cancel signal y = wI*I + wQ*Q');
+ylabel('Amplitude');
+
+subplot(3,1,3);
+plot(t, e_yes); grid on;
+title('Residual after cancellation (e = d\_mic - y)');
+xlabel('Time (s)');
+ylabel('Amplitude');
+
+%% Plot 3: FFT overlay 
+N = length(t);
+w = hann(N);
+
+E0 = fft(e_no  .* w);
+E1 = fft(e_yes .* w);
+
+f = (0:N-1)*(fs/N);
+half = 1:floor(N/2);
 
 figure;
-bar([toolAttnDig_dB, toolAttnFix_dB]);
+plot(f(half), 20*log10(abs(E0(half))+1e-12), 'LineWidth', 1.2); hold on;
+plot(f(half), 20*log10(abs(E1(half))+1e-12), 'LineWidth', 1.2);
 grid on;
-set(gca,'XTick',1,'XTickLabel',{'Tool-band attenuation'});
-legend('Digital-only','Analog-assisted','Location','northwest');
-ylabel('Attenuation (dB)');
-title(sprintf('Tool Noise Reduction (Delay = %d \\mus, SNR = %d dB)', digitalDelay_us, desiredSNR_dB));
+xlim([0 3000]);
+xlabel('Frequency (Hz)');
+ylabel('Magnitude (dB, arbitrary)');
+title('Spectrum before vs after: 1kHz reduced, speech band preserved');
+legend('No cancel','With cancel','Location','best');
 
-figure;
-bar([speechChangeDig_dB, speechChangeFix_dB]);
-grid on;
-set(gca,'XTick',1,'XTickLabel',{'Speech-band change'});
-legend('Digital-only','Analog-assisted','Location','northwest');
-ylabel('Change (dB) relative to no-ANC mic');
-title('Speech Preservation (target: near 0 dB, not < -5 dB)');
-
-%% ---------------- LISTENING DEMO ----------------
-if doListen
-    % Normalize playback to avoid clipping
-    p1 = mic             / (max(abs(mic)) + 1e-12);
-    p2 = ear_digitalOnly / (max(abs(ear_digitalOnly)) + 1e-12);
-    p3 = ear_fixedBest   / (max(abs(ear_fixedBest)) + 1e-12);
-
-    fprintf("\n=== RESULTS ===\n");
-    fprintf("Digital delay: %d us | Desired tool-speech SNR: %d dB\n", digitalDelay_us, desiredSNR_dB);
-    fprintf("Tool-band attenuation: digital-only = %.2f dB | analog-assisted = %.2f dB\n", ...
-        toolAttnDig_dB, toolAttnFix_dB);
-    fprintf("Best phase setting (HF correction): %d deg at f0=%.0f Hz\n", bestPhase, f0);
-    fprintf("Speech-band change:  digital-only = %.2f dB | analog-assisted = %.2f dB\n", ...
-        speechChangeDig_dB, speechChangeFix_dB);
-    fprintf("Note: speech-band change should be close to 0 dB (and not < -5 dB).\n");
-
-    fprintf("\nPlaying (1) Mic: TOOL + SPEECH (no ANC)\n");
-    soundsc(p1, fs); pause(min(3, length(p1)/fs) + 0.5);
-
-    fprintf("Playing (2) Digital-only ANC (tool targeted, with delay)\n");
-    soundsc(p2, fs); pause(min(3, length(p2)/fs) + 0.5);
-
-    fprintf("Playing (3) Analog-assisted ANC (HF phase tuned)\n");
-    soundsc(p3, fs); pause(min(3, length(p3)/fs) + 0.5);
-end
+%% Print final learned weights
+fprintf('Final weights: wI = %.4f, wQ = %.4f\n', wI, wQ);
