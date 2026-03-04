@@ -314,6 +314,30 @@ end
 
 e_yes = e;
 
+%% LISTEN TO SIGNALS (PART B)
+
+
+fprintf('\nLISTENING DEMO (PART B)\n');
+
+fprintf('Playing TOOL ONLY...\n');
+soundsc(tool, fs);
+pause(length(tool)/fs + 1);
+
+fprintf('Playing SPEECH / AMBIENT ONLY...\n');
+soundsc(speech, fs);
+pause(length(speech)/fs + 1);
+
+fprintf('Playing CALIBRATION MIC (tool + speech + noise)...\n');
+soundsc(d_mic, fs);
+pause(length(d_mic)/fs + 1);
+
+fprintf('Playing RESIDUAL AFTER CANCELLATION...\n');
+soundsc(e_yes, fs);
+pause(length(e_yes)/fs + 1);
+
+fprintf('Done.\n');
+
+
 %% PART B TOOL RMS FIGURE (TOOL ONLY)
 e_tool_no  = e_no  - speech;
 e_tool_yes = e_yes - speech;
