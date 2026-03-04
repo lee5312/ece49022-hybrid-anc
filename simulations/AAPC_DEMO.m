@@ -177,214 +177,214 @@ for s = 1:numel(scenariosA)
 end
 
 
-%  PART B — REAL AUDIO FILE SCENARIOS (PERFECT ONLY)
+%%  PART B + PART C — REAL AUDIO FILE SCENARIOS 
 
+fprintf("\nPART B & C: REAL AUDIO SCENARIOS\n");
 
-fprintf("\nPART B: REAL AUDIO SCENARIOS (PERFECT ONLY)\n");
-
-%% AUDIO FILES
-tool_file   = "Electric_Drill.m4a";
+% Common speech file
 speech_file = "Speech_Ambient.m4a";
 
-%% GLOBAL SETUP
-fs_target = 48000;
-T = 2.0;
-eps0 = 1e-12;
+% Run PART B (Electric Drill + Speech)
+run_real_audio_case("PART B", "Electric_Drill.m4a", speech_file);
 
-%% LOAD AUDIO
-assert(isfile(tool_file),   "Missing file: %s", tool_file);
-assert(isfile(speech_file), "Missing file: %s", speech_file);
+% Run PART C (Narrow_Band + Speech)
+run_real_audio_case("PART C", "Narrow_Band.m4a", speech_file);
 
-[x_tool,  fs_tool]  = audioread(tool_file);
-[x_sp,    fs_sp]    = audioread(speech_file);
 
-% mono
-if size(x_tool,2) > 1, x_tool = mean(x_tool,2); end
-if size(x_sp,2)   > 1, x_sp   = mean(x_sp,2);   end
+function run_real_audio_case(tag, tool_file, speech_file)
 
-% resample
-if fs_tool ~= fs_target, x_tool = resample(x_tool, fs_target, fs_tool); end
-if fs_sp   ~= fs_target, x_sp   = resample(x_sp,   fs_target, fs_sp);   end
+    fprintf("\n%s: Running %s + %s\n", tag, tool_file, speech_file);
 
-fs = fs_target;
+    %% GLOBAL SETUP
+    fs_target = 48000;
+    T = 2.0;
+    eps0 = 1e-12;
 
-% trim
-Nmax = round(T*fs);
-N = min([length(x_tool), length(x_sp), Nmax]);
+    %% LOAD AUDIO
+    assert(isfile(tool_file),   "Missing file: %s", tool_file);
+    assert(isfile(speech_file), "Missing file: %s", speech_file);
 
-tool_raw   = x_tool(1:N);
-speech_raw = x_sp(1:N);
+    [x_tool, fs_tool] = audioread(tool_file);
+    [x_sp,   fs_sp]   = audioread(speech_file);
 
-t  = (0:N-1)'/fs;
-dt = 1/fs;
+    % mono
+    if size(x_tool,2) > 1, x_tool = mean(x_tool,2); end
+    if size(x_sp,2)   > 1, x_sp   = mean(x_sp,2);   end
 
-%% NORMALIZE + SCALE (REALISTIC MIX)
-tool_rms0   = rms(tool_raw)   + eps0;
-speech_rms0 = rms(speech_raw) + eps0;
+    % resample
+    if fs_tool ~= fs_target, x_tool = resample(x_tool, fs_target, fs_tool); end
+    if fs_sp   ~= fs_target, x_sp   = resample(x_sp,   fs_target, fs_sp);   end
 
-tool   = tool_raw   / tool_rms0;
-speech = speech_raw / speech_rms0;
+    fs = fs_target;
 
-tool_level   = 1.0;
-speech_level = 0.35;
+    % trim
+    Nmax = round(T*fs);
+    N = min([length(x_tool), length(x_sp), Nmax]);
 
-tool   = tool_level   * tool;
-speech = speech_level * speech;
+    tool_raw   = x_tool(1:N);
+    speech_raw = x_sp(1:N);
 
-%% MIC NOISE + CAL MIC
-rng(1);
-meas_noise = 0.01 * randn(N,1);
-d_mic = tool + speech + meas_noise;
-e_no = d_mic;
+    t  = (0:N-1)'/fs;
+    dt = 1/fs;
 
-%% POWER AMP + PROP DELAY
-Gamp = 5;
-Vmax = 2.0;
-delay_s = 0.0002;
-Nd = max(1, round(delay_s * fs));
+    %% NORMALIZE + SCALE (REALISTIC MIX)
+    tool_rms0   = rms(tool_raw)   + eps0;
+    speech_rms0 = rms(speech_raw) + eps0;
 
-mu = 48;
+    tool   = tool_raw   / tool_rms0;
+    speech = speech_raw / speech_rms0;
 
-%% "HOW TOOL LOOKS LIKE" FIGURE (KEEP)
-figure('Name','PART B | Tool Signal: Time + FFT + PSD');
+    tool_level   = 1.0;
+    speech_level = 0.35;
 
-subplot(3,1,1);
-plot(t, tool); grid on;
-title('PART B | Tool waveform (time domain)');
-xlabel('Time (s)'); ylabel('Amplitude');
+    tool   = tool_level   * tool;
+    speech = speech_level * speech;
 
-Nfft = 2^nextpow2(N);
-w = hann(N);
-ToolFFT = fft(tool .* w, Nfft);
-f = (0:Nfft-1)*(fs/Nfft);
-half = 1:floor(Nfft/2);
-magdB = 20*log10(abs(ToolFFT(half))+eps0);
+    %% CAL MIC
+    meas_noise = zeros(N,1);
+    d_mic = tool + speech + meas_noise;
+    e_no = d_mic;
 
-subplot(3,1,2);
-plot(f(half), magdB, 'LineWidth', 1.1);
-grid on; xlim([0 8000]);
-title('PART B | Tool FFT magnitude (0–8 kHz)');
-xlabel('Frequency (Hz)'); ylabel('Magnitude (dB)');
+    %% POWER AMP + PROP DELAY
+    Gamp = 5;
+    Vmax = 2.0;
+    delay_s = 0.0002;
+    Nd = max(1, round(delay_s * fs));
 
-subplot(3,1,3);
-[pxx,f_psd] = pwelch(tool, hann(4096), 2048, 4096, fs);
-plot(f_psd, 10*log10(pxx+eps0), 'LineWidth', 1.1); grid on;
-xlim([0 8000]);
-title('PART B | Tool Power Spectral Density (Welch)');
-xlabel('Frequency (Hz)'); ylabel('PSD (dB/Hz)');
+    mu = 48;
 
-%% RUN ONLY PERFECT ANTINOISE SCENARIO
-tool_adv = [tool(1+Nd:end); zeros(Nd,1)];
-anti_mcu = (1/Gamp) * tool_adv;
+    %% "HOW TOOL LOOKS LIKE" FIGURE
+    figure('Name', sprintf('%s | Tool Signal: Time + FFT + PSD', tag));
 
-Iref = anti_mcu;
-Qref = imag(hilbert(Iref));
+    subplot(3,1,1);
+    plot(t, tool); grid on;
+    title(sprintf('%s | Tool waveform (time domain)', tag));
+    xlabel('Time (s)'); ylabel('Amplitude');
 
-wI = 1.0; wQ = 0.0;
-freeze_if_small = true;
+    Nfft = 2^nextpow2(N);
+    w = hann(N);
+    ToolFFT = fft(tool .* w, Nfft);
+    f = (0:Nfft-1)*(fs/Nfft);
+    half = 1:floor(Nfft/2);
+    magdB = 20*log10(abs(ToolFFT(half))+eps0);
 
-y  = zeros(N,1);
-e  = zeros(N,1);
-ybuf = zeros(Nd,1);
+    subplot(3,1,2);
+    plot(f(half), magdB, 'LineWidth', 1.1);
+    grid on; xlim([0 8000]);
+    title(sprintf('%s | Tool FFT magnitude (0–8 kHz)', tag));
+    xlabel('Frequency (Hz)'); ylabel('Magnitude (dB)');
 
-for n = 1:N
-    y_pre = wI*Iref(n) + wQ*Qref(n);
+    subplot(3,1,3);
+    [pxx,f_psd] = pwelch(tool, hann(4096), 2048, 4096, fs);
+    plot(f_psd, 10*log10(pxx+eps0), 'LineWidth', 1.1); grid on;
+    xlim([0 8000]);
+    title(sprintf('%s | Tool Power Spectral Density (Welch)', tag));
+    xlabel('Frequency (Hz)'); ylabel('PSD (dB/Hz)');
 
-    y_lin = Gamp * y_pre;
-    y_amp = max(min(y_lin, Vmax), -Vmax);
+    %% RUN ANTINOISE SCENARIO
+    tool_adv = [tool(1+Nd:end); zeros(Nd,1)];
+    anti_mcu = (1/Gamp) * tool_adv;
 
-    y_del = ybuf(1);
-    ybuf(1:end-1) = ybuf(2:end);
-    ybuf(end) = y_amp;
+    Iref = anti_mcu;
+    Qref = imag(hilbert(Iref));
 
-    e(n) = d_mic(n) - y_del;
+    wI = 1.0; wQ = 0.0;
 
-    if freeze_if_small
-        if abs(e(n)) > 1e-3
-            wI = wI + mu * e(n) * Iref(n) * dt;
-            wQ = wQ + mu * e(n) * Qref(n) * dt;
-        end
-    else
+    y  = zeros(N,1);
+    e  = zeros(N,1);
+    ybuf = zeros(Nd,1);
+
+    for n = 1:N
+        y_pre = wI*Iref(n) + wQ*Qref(n);
+
+        y_lin = Gamp * y_pre;
+        y_amp = max(min(y_lin, Vmax), -Vmax);
+
+        y_del = ybuf(1);
+        ybuf(1:end-1) = ybuf(2:end);
+        ybuf(end) = y_amp;
+
+        e(n) = d_mic(n) - y_del;
+
         wI = wI + mu * e(n) * Iref(n) * dt;
         wQ = wQ + mu * e(n) * Qref(n) * dt;
+
+        y(n) = y_del;
     end
 
-    y(n) = y_del;
+    e_yes = e;
+
+    %% LISTEN TO SIGNALS
+    fprintf('\nLISTENING DEMO (%s)\n', tag);
+
+    fprintf('Playing TOOL ONLY...\n');
+    soundsc(tool, fs);
+    pause(length(tool)/fs + 1);
+
+    fprintf('Playing SPEECH / AMBIENT ONLY...\n');
+    soundsc(speech, fs);
+    pause(length(speech)/fs + 1);
+
+    fprintf('Playing CALIBRATION MIC (tool + speech)...\n');
+    soundsc(d_mic, fs);
+    pause(length(d_mic)/fs + 1);
+
+    fprintf('Playing RESIDUAL AFTER CANCELLATION...\n');
+    soundsc(e_yes, fs);
+    pause(length(e_yes)/fs + 1);
+
+    fprintf('Done.\n');
+
+    %% TOOL RMS FIGURE (TOOL ONLY) — for metrics/plots
+    e_tool_no  = e_no  - speech;
+    e_tool_yes = e_yes - speech;
+
+    win = round(0.02*fs);
+    tool_rms_no  = sqrt(movmean(e_tool_no.^2,  win));
+    tool_rms_yes = sqrt(movmean(e_tool_yes.^2, win));
+
+    figure('Name', sprintf('%s | Tool RMS Before vs After', tag));
+    plot(t, tool_rms_no,  'LineWidth', 1.2); hold on;
+    plot(t, tool_rms_yes, 'LineWidth', 1.2);
+    grid on;
+    xlabel('Time (s)'); ylabel('RMS (arb)');
+    title(sprintf('%s | Tool RMS (no cancel) vs (cancel)', tag));
+    legend('Tool RMS (no cancel)','Tool RMS (cancel)','Location','best');
+
+    %% TIME DOMAIN FIGURE (FIXED SCALE)
+    figure('Name', sprintf('%s | Time Domain', tag));
+
+    subplot(4,1,1);
+    plot(t, d_mic); grid on;
+    title(sprintf('%s | Calibration mic: tool + speech', tag));
+    ylabel('Amp');
+
+    subplot(4,1,2);
+    plot(t, speech, 'LineWidth', 1.1); grid on;
+    title('Speech/Ambient only (ground truth — should NOT be cancelled)');
+    ylabel('Amp');
+    yl = ylim;   % <-- save speech scale
+
+    subplot(4,1,3);
+    plot(t, e_yes); grid on;
+    title('Residual after cancellation');
+    ylabel('Amp');
+
+    subplot(4,1,4);
+    plot(t, e_yes - speech, 'LineWidth', 1.1); grid on;
+    title('Residual minus speech (same scale as speech)');
+    xlabel('Time (s)');
+    ylabel('Amp');
+    ylim(yl);    % <-- force same scale as speech
+
+    %% Console summary
+    overall_no  = rms(e_tool_no)  + eps0;
+    overall_yes = rms(e_tool_yes) + eps0;
+    overall_attn_dB = 20*log10(overall_yes/overall_no);
+
+    fprintf("\n=== %s SUMMARY ===\n", tag);
+    fprintf("Tool file: %s\n", tool_file);
+    fprintf("Final weights: wI = %.4f, wQ = %.4f\n", wI, wQ);
+    fprintf("Overall tool attenuation (RMS): %.2f dB\n", overall_attn_dB);
 end
 
-e_yes = e;
-
-%% LISTEN TO SIGNALS (PART B)
-
-
-fprintf('\nLISTENING DEMO (PART B)\n');
-
-fprintf('Playing TOOL ONLY...\n');
-soundsc(tool, fs);
-pause(length(tool)/fs + 1);
-
-fprintf('Playing SPEECH / AMBIENT ONLY...\n');
-soundsc(speech, fs);
-pause(length(speech)/fs + 1);
-
-fprintf('Playing CALIBRATION MIC (tool + speech + noise)...\n');
-soundsc(d_mic, fs);
-pause(length(d_mic)/fs + 1);
-
-fprintf('Playing RESIDUAL AFTER CANCELLATION...\n');
-soundsc(e_yes, fs);
-pause(length(e_yes)/fs + 1);
-
-fprintf('Done.\n');
-
-
-%% PART B TOOL RMS FIGURE (TOOL ONLY)
-e_tool_no  = e_no  - speech;
-e_tool_yes = e_yes - speech;
-
-win = round(0.02*fs);
-tool_rms_no  = sqrt(movmean(e_tool_no.^2,  win));
-tool_rms_yes = sqrt(movmean(e_tool_yes.^2, win));
-
-figure('Name','PART B | Tool RMS Before vs After | PERFECT ONLY');
-plot(t, tool_rms_no,  'LineWidth', 1.2); hold on;
-plot(t, tool_rms_yes, 'LineWidth', 1.2);
-grid on;
-xlabel('Time (s)'); ylabel('RMS (arb)');
-title('PART B | Tool RMS (no cancel) vs (cancel) — Perfect antinoise');
-legend('Tool RMS (no cancel)','Tool RMS (cancel)','Location','best');
-
-%% PART B TIME DOMAIN FIGURE (KEEP)
-figure('Name','PART B | Time Domain | PERFECT ONLY');
-
-subplot(4,1,1);
-plot(t, d_mic); grid on;
-title('PART B | Calibration mic: tool + speech + noise | PERFECT ONLY');
-ylabel('Amp');
-
-subplot(4,1,2);
-plot(t, speech, 'LineWidth', 1.1); grid on;
-title('Speech/Ambient only (ground truth — should NOT be cancelled)');
-ylabel('Amp');
-
-subplot(4,1,3);
-plot(t, e_yes); grid on;
-title('Residual after cancellation');
-ylabel('Amp');
-
-subplot(4,1,4);
-plot(t, e_yes - speech, 'LineWidth', 1.1); grid on;
-title('Residual minus speech (ideally \approx 0)');
-xlabel('Time (s)');
-ylabel('Amp');
-
-%% Console summary
-overall_no  = rms(e_tool_no)  + eps0;
-overall_yes = rms(e_tool_yes) + eps0;
-overall_attn_dB = 20*log10(overall_yes/overall_no);
-
-fprintf("\n=== PART B | PERFECT ONLY ===\n");
-fprintf("Final weights: wI = %.4f, wQ = %.4f\n", wI, wQ);
-fprintf("Overall tool attenuation (RMS): %.2f dB\n", overall_attn_dB);
-
-fprintf("\nDONE: PLOTS GENERATED\n");
