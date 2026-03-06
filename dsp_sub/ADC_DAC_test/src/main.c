@@ -24,11 +24,14 @@ void setup_adc(void) {
     while (!(ADC1->ISR & ADC_ISR_ADRDY)); //wait for ADC to be ready
 
     // Select channel 1 ADC_IN1 (PA1)
-    ADC1->CHSELR |= ADC_CHSELR_CHSEL1;
+    ADC1->CHSELR = ADC_CHSELR_CHSEL1;
     while (!(ADC1->ISR & ADC_ISR_ADRDY)); //wait for ADC to be ready
 }
 
-// ADC Sampling using TIM2
+
+///////////////////////
+// TIM2 for ADC
+///////////////////////
 void TIM2_IRQHandler() {
     // Acknowledge the interrupt.
     // Start the ADC by turning on the ADSTART bit in the CR.
@@ -71,16 +74,17 @@ void setup_dac(void) {
 }
 
 
-#define BCSIZE 32
-int bcsum = 0;
-int boxcar[BCSIZE];
-int bcn = 0;
-
-
+///////////////////////
+// TIM6 for DAC
+///////////////////////
 void TIM6_IRQHandler() {
 
     // clear interrupt flag
     TIM6->SR &= ~TIM_SR_UIF;
+
+    // Testing DAC without ADC samples
+    // test += 50;
+    // DAC->DHR12R1 = test;
 
     // output lastest ADC sample
     DAC->DHR12R1 = adc_sample;
@@ -92,8 +96,8 @@ void init_tim6(void) {
     // Timer clock = 48 MHz
     // PSC * ARR / timer_clk = sample period
     // Example: PSC= 9, ARR=99 => 48MHz/(99+10)= 48 kHz
-    TIM2->PSC = 10 - 1;
-    TIM2->ARR = 100 - 1;
+    TIM6->PSC = 10 - 1;
+    TIM6->ARR = 100 - 1;
     
     TIM6->DIER |= TIM_DIER_UIE; // enable update interrupt
     TIM6->CR2 |= TIM_CR2_MMS_1; 
