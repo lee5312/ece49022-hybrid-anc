@@ -3,7 +3,7 @@ clear; close all; clc;
 
 %% PARAMETERS
 fs = 48000;          % Sampling frequency (Hz)
-N  = 40000;          % Number of samples
+N  = 20000;          % Number of samples
 M  = 128;             % FIR filter length (model order)
 mu = 0.0001;          % Step size (learning rate)             
 t  = (0:N-1)/fs;            % Time vector (matrix)
@@ -12,12 +12,16 @@ t  = (0:N-1)/fs;            % Time vector (matrix)
 %     'blackbird.wav'
 %     'cardbox.wav'
 %     'f4.wav'];
-
+noise1 = "10khz-target_noise.wav";
+noise2 = "ballet.wav";
+noise3 = "blackbird.wav";
+noise4 = "cardbox.wav";
+noise5 = "f4.wav";
 %% 
 % 1. LOAD TARGET NOISE (X)
 %% 
 % audioread used to extract wave signal and sampling frequency
-[X, fs1] = audioread('blackbird.wav');   % Any noise file
+[X, fs1] = audioread(noise5);   % Any noise file
 if size(X,2) > 1
     X = mean(X,2);
 end
@@ -91,9 +95,9 @@ mu_error = zeros(1,length(mu_test_values));
         e(n) = Y(n) - y_hat(n);
         
         g = g + mu * e(n) * x_vec;
-        if (n == 10000 || (n == 20000) || (n == 30000) || (n == 40000))
-            ans = 1;
-        end
+%         if (n == 10000 || (n == 20000) || (n == 30000) || (n == 40000))
+%             ans = 1;
+%         end
     end
     % Store final result
 %     mu_error(m) = norm(true_H1 - g);
@@ -116,17 +120,21 @@ title('Estimated Y')
 grid on
 
 figure;
-subplot(3,1,1)
+subplot(4,1,1)
 plot(true_H1, 'LineWidth', 1.5)
 title('True Impulse Response')
 grid on
-subplot(3,1,2)
+subplot(4,1,2)
 plot(g, 'LineWidth', 1.5)
 title('Estimated Impulse Response (LMS)')
 grid on
-subplot(3,1,3)
-plot(e)
-title('Error Signal')
+subplot(4,1,3)
+plot(Y-y_hat)
+title('Y-y_hat Signal')
+grid on
+subplot(4,1,4)
+plot(v)
+title('Speech Signal')
 grid on
 
 figure;
@@ -140,7 +148,27 @@ title('Transfer Function Diff Signal')
 grid on
 
 %% 
-% 8. Identification Error
+% 8. Anti-Noise and 90 degree shifted
+anti_noise = -y_hat;
+h_hilbert = firpm(M-1,[0.05 0.95], [1 1], 'hilbert');
+anti_noise_90 = filter(h_hilbert, 1, anti_noise);
+
+figure;
+subplot(3,1,1)
+plot(XH1)
+title('Perfect Anti-noise')
+
+subplot(3,1,2)
+plot(anti_noise)
+title('Original Anti-noise')
+
+subplot(3,1,3)
+plot(anti_noise_90)
+title('90° Shifted Anti-noise')
+
+
+%% 
+% 9. Identification Error
 %% 
 
 error_norm = norm(true_H1 - g);
