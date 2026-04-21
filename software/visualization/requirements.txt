@@ -1,0 +1,4 @@
+# ECE 49022 — Dae Visualization Tools
+pyserial>=3.5
+matplotlib>=3.5
+numpy>=1.21

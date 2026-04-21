@@ -1,139 +1,54 @@
-# Bill of Materials (BOM)
-## SAHANC - Spatially Aware Hybrid ANC System
+# Bill Of Materials
+## Active Integrated Board Baseline
 
-**Last Updated**: February 2026  
-**Status**: Draft - Needs team review
+This file tracks the major active assemblies and ICs for the current Teensy-based system.
+For exact passive-level manufacturing output, use the Altium project and its generated BOM/export artifacts.
 
----
+## Mainboard Core
 
-## 🟢 Already Have
-| Component | Qty | Notes |
-|-----------|-----|-------|
-| IMU (BNO055 or MPU-6050) | 1 | Dae has one |
+| Item | Qty | Notes |
+|------|-----|-------|
+| Teensy 4.1 | 1 | main MCU board |
+| DWM3000TR13 | 1 | mainboard UWB `U16` |
+| IMU breakout | 1 | connected on `J_IMU_1` |
 
----
+## Satellite Boards
 
-## 🔴 Need to Purchase
+| Item | Qty | Notes |
+|------|-----|-------|
+| DWM3000TR13 | 3 | Tool, Left, Right satellite boards |
+| Adafruit SPW2430 breakout | 3 | one per satellite board |
+| 9-pin satellite cable/header set | 3 | one per satellite board |
 
-### 1. Microcontrollers & Modules
+## Integrated Audio And Analog Blocks
 
-| Component | Qty | Est. Price | Source | Notes |
-|-----------|-----|------------|--------|-------|
-| **ESP32-S3 DevKit** | 2 | $10 ea | Amazon/DigiKey | One for FDM, one for headset |
-| **STM32F446RE Nucleo** | 1 | $15 | DigiKey/Mouser | DSP processing |
-| **DWM3000 UWB Module** | 2 | $25 ea | DigiKey/Mouser | Distance ranging (anchor + tag) |
+| Item | Qty | Notes |
+|------|-----|-------|
+| PCM1808PWR | 2 | ADC |
+| PCM5102APWR | 3 | DAC |
+| OPA4192IPWR | 4 | analog stages |
+| OPA2192IDR | 6 | analog stages |
+| OPA1656IDR | 2 | analog stages |
+| AD835ARZ-REEL7 | 8 | analog multiplier stages |
 
-**Subtotal: ~$85**
+## Power Components
 
-### 2. Audio Components
+| Item | Qty | Notes |
+|------|-----|-------|
+| TPS62842DGRR | 1 | power stage |
+| TPS7A2033PDBVR | 1 | power stage |
+| LM27761DSGR | 1 | negative rail generation |
+| TPS63700DRCTG4 | 1 | rail generation |
+| LT1964ES5-5#TRMPBF | 1 | negative regulator |
 
-| Component | Qty | Est. Price | Source | Notes |
-|-----------|-----|------------|--------|-------|
-| **I2S MEMS Mic (SPH0645)** | 2 | $8 ea | Adafruit/DigiKey | FDM + Calibration mic |
-| **I2S DAC (PCM5102)** | 1 | $5 | Amazon | Audio output |
-| **Small Speaker/Driver** | 1 | $10 | Amazon | For testing |
-| **3.5mm Headphone Jack** | 2 | $1 ea | - | - |
+## Calibration / Internal Mic Headers
 
-**Subtotal: ~$33**
+| Item | Qty | Notes |
+|------|-----|-------|
+| calibration mic header `J9` | 1 | left calibration path |
+| calibration mic header `J10` | 1 | right calibration path |
 
-### 3. Analog Phase Control Circuit
+## Notes
 
-| Component | Qty | Est. Price | Source | Notes |
-|-----------|-----|------------|--------|-------|
-| **Op-Amp (TL074 or OPA4134)** | 4 | $2 ea | DigiKey | All-pass filter |
-| **Digital Potentiometer (MCP41010)** | 4 | $2 ea | DigiKey | Phase adjustment |
-| **Precision Resistors Kit** | 1 | $15 | Amazon | 1% tolerance |
-| **Capacitor Kit (film)** | 1 | $12 | Amazon | For filters |
-| **Voltage Regulator (±5V)** | 2 | $3 ea | DigiKey | Analog power |
-
-**Subtotal: ~$50**
-
-### 4. Power & Misc
-
-| Component | Qty | Est. Price | Source | Notes |
-|-----------|-----|------------|--------|-------|
-| **LiPo Battery (2000mAh)** | 2 | $12 ea | Amazon | FDM + Headset |
-| **Battery Charger Module** | 2 | $3 ea | Amazon | TP4056 |
-| **3.3V Regulator (AMS1117)** | 5 | $1 ea | Amazon | - |
-| **PCB Prototype (JLCPCB)** | 5 | $10 total | JLCPCB | 5 boards |
-| **Breadboards** | 3 | $5 ea | Amazon | Prototyping |
-| **Jumper Wires** | 1 set | $8 | Amazon | - |
-| **Headers & Connectors** | 1 set | $10 | Amazon | - |
-
-**Subtotal: ~$73**
-
-### 5. Enclosure & Mechanical
-
-| Component | Qty | Est. Price | Source | Notes |
-|-----------|-----|------------|--------|-------|
-| **3M Earmuff (플라스틱 헤드밴드)** | 1 | $10-15 | Amazon | ⚠️ 금속 NO - UWB 간섭 방지 |
-| **3D Printed Enclosure** | - | $0-20 | Bechtel/Lab | PCB 하우징 |
-| **Velcro/Mounting Hardware** | 1 | $5 | Amazon | - |
-
-> ⚠️ **이어머프 선택 기준:**
-> - 헤드밴드: 플라스틱/나일론 (금속 X)
-> - 조절부: 금속 없는 것
-> - 이어컵: 금속 그릴 없는 것
-> - 검색어: "plastic headband earmuff hearing protection"
-
-**Subtotal: ~$35**
-
----
-
-## 💰 Total Estimate
-
-| Category | Cost |
-|----------|------|
-| MCUs & Modules | $85 |
-| Audio | $33 |
-| Analog Circuit | $50 |
-| Power & Misc | $73 |
-| Enclosure | $35 |
-| **TOTAL** | **~$276** |
-
-**Per person (4 members): ~$69**
-
----
-
-## 📦 Recommended Purchase Order
-
-### Phase 1 - Core Testing (Week 1-2)
-- [ ] ESP32-S3 DevKit x2
-- [ ] STM32 Nucleo
-- [ ] I2S MEMS Mics x2
-- [ ] Breadboards, jumper wires
-
-### Phase 2 - UWB Integration (Week 3-4)
-- [ ] DWM3000 modules x2
-- [ ] (IMU already have)
-
-### Phase 3 - Analog Circuit (Week 5-6)
-- [ ] Op-amps, digital pots
-- [ ] Resistor/capacitor kits
-- [ ] PCB order
-
-### Phase 4 - Integration (Week 7+)
-- [ ] Batteries, regulators
-- [ ] Enclosure materials
-
----
-
-## 🔗 Quick Links
-
-- [DigiKey DWM3000](https://www.digikey.com/en/products/detail/qorvo/DWM3000/14310381)
-- [Adafruit SPH0645 Mic](https://www.adafruit.com/product/3421)
-- [Amazon ESP32-S3](https://www.amazon.com/s?k=esp32-s3+devkit)
-- [JLCPCB](https://jlcpcb.com/) - $2 for 5 PCBs
-
----
-
-## ⚠️ Notes
-
-1. **Check Purdue ECE Stock** - Some components might be available in lab
-2. **Student Discounts** - DigiKey/Mouser have student programs
-3. **Lead Time** - DWM3000 may have 2-3 week lead time
-4. **Alternative UWB** - DW1000 is cheaper but older
-
----
-
-*Update this file as purchases are made. Mark [x] when ordered.*
+- This list reflects the active integrated `Sheet1.NET` mainboard, not the older STM32/ESP32 prototype.
+- Exact passives, connector part numbers, and manufacturing outputs should come from the Altium source set and generated BOM exports.

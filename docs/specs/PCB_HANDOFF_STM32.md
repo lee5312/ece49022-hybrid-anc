@@ -552,3 +552,12 @@ NET: BOOT0          BOOT0 ↔ 100kΩ pull-down to GND + optional jumper/test pad
 NET: VCAP1          VCAP1 ↔ 2.2µF to GND
 NET: GND            Common ground ↔ All VSS/GND/VSSA pins
 ```
+# LEGACY DOCUMENT
+
+This file is preserved for early prototype history only.
+It is not the active hardware reference for the current integrated Teensy mainboard.
+
+Use these files instead:
+
+- `ALTIUM_MAINBOARD_COMPLETE_FINAL_FROM_SHEET1_NET_KR.md`
+- `SATELLITE_BOARD_KR.md`

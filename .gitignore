@@ -25,6 +25,15 @@ venv/
 *.kicad_prl
 fp-info-cache
 
+# Altium generated history/log artifacts
+**/History/
+**/Project Logs for */
+**/Project Outputs for */
+*.apr
+*.APR_LIB
+*.REP
+*.EXTREP
+
 # Gerbers (keep final versions, ignore temp)
 hardware/gerbers/temp/
 
