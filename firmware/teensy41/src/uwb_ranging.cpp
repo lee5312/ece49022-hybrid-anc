@@ -190,11 +190,18 @@ bool twr_respond(dwm3000_inst_t *inst,
     const uint16_t initiator_addr = get_le16(&rx_buf[7]);
     const uint64_t t3 = (t2 + TWR_RESP_DELAY_DWT) & 0xFFFFFFFE00ULL;
 
+    // The chip schedules the start of the TX preamble at DX_TIME = t3, but
+    // the actual antenna emission happens t3 + tx_ant_dly later. SS-TWR
+    // requires the responder to advertise the antenna time so the initiator
+    // computes ToF antenna-to-antenna; otherwise every measurement is biased
+    // by tx_ant_dly/2 ticks (~38 m raw before delay correction).
+    const uint64_t t3_advertised = t3 + static_cast<uint64_t>(inst->tx_ant_dly);
+
     s_resp_msg[2] = rx_buf[2];
     put_le16(&s_resp_msg[5], initiator_addr);
     put_le16(&s_resp_msg[7], my_addr);
     put_le32(&s_resp_msg[10], static_cast<uint32_t>(t2 & 0xFFFFFFFFu));
-    put_le32(&s_resp_msg[14], static_cast<uint32_t>(t3 & 0xFFFFFFFFu));
+    put_le32(&s_resp_msg[14], static_cast<uint32_t>(t3_advertised & 0xFFFFFFFFu));
 
     dwm3000_write_tx_data(inst, s_resp_msg, sizeof(s_resp_msg), 0);
     dwm3000_set_tx_frame_len(inst, TWR_RESP_MSG_LEN);
@@ -255,12 +262,15 @@ twr_result_t twr_loopback(dwm3000_inst_t *initiator, uint16_t init_addr,
     dwm3000_clear_sys_status(responder, DW_ALL_RX_EVENTS);
 
     const uint64_t t3 = (t2 + TWR_RESP_DELAY_DWT) & 0xFFFFFFFE00ULL;
+    // See twr_respond() above: the chip emits at t3 + tx_ant_dly, so the
+    // advertised t3 must include tx_ant_dly to keep ToF antenna-to-antenna.
+    const uint64_t t3_advertised = t3 + static_cast<uint64_t>(responder->tx_ant_dly);
 
     s_resp_msg[2] = s_poll_msg[2];
     put_le16(&s_resp_msg[5], init_addr);
     put_le16(&s_resp_msg[7], resp_addr);
     put_le32(&s_resp_msg[10], static_cast<uint32_t>(t2 & 0xFFFFFFFFu));
-    put_le32(&s_resp_msg[14], static_cast<uint32_t>(t3 & 0xFFFFFFFFu));
+    put_le32(&s_resp_msg[14], static_cast<uint32_t>(t3_advertised & 0xFFFFFFFFu));
 
     dwm3000_write_tx_data(responder, s_resp_msg, sizeof(s_resp_msg), 0);
     dwm3000_set_tx_frame_len(responder, TWR_RESP_MSG_LEN);

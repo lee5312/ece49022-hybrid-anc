@@ -207,10 +207,14 @@ bool init_uwb_module(dwm3000_inst_t *inst, uint16_t short_addr,
     dwm3000_configure_default(inst);
     dwm3000_set_antenna_delay(inst, tx_ant_dly, rx_ant_dly);
     dwm3000_write32(inst, DW_PANADR, (static_cast<uint32_t>(TWR_PAN_ID) << 16) | short_addr);
+    const int32_t pgf_status = dwm3000_run_pgf_cal(inst);
     serial_printf("[INIT] UWB %s antenna delay: tx=%u rx=%u\r\n",
                   inst->label,
                   static_cast<unsigned>(tx_ant_dly),
                   static_cast<unsigned>(rx_ant_dly));
+    serial_printf("[INIT] UWB %s PGF calibration: %ld\r\n",
+                  inst->label,
+                  static_cast<long>(pgf_status));
     serial_printf("[INIT] UWB %s ready.\r\n", inst->label);
     return true;
 }
@@ -530,6 +534,7 @@ void setup(void)
     }
 
     serial_printf("\r\n=== Dae Teensy 4.1 sensory front-end ===\r\n");
+    serial_printf("Mainboard nets: Documents/ALTIUM_MAINBOARD_COMPLETE_FINAL_FROM_SHEET1_NET_KR.md\r\n");
     serial_printf("stage=%u (%s) UWB=%u ESKF=%u MIC_ADC=%u\r\n",
                   static_cast<unsigned>(BRINGUP_STAGE),
                   bringup_stage_name(),

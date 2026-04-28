@@ -34,13 +34,15 @@ extern "C" {
 //  TWR protocol constants
 // ================================================================
 
-// Responder reply delay (DW3000 time units, ≈ 400 μs)
-#define TWR_RESP_DELAY_UUS   400
+// Same-MCU loopback (SS-TWR) responder delay. Aligned with validated `satellite_tester`
+// bring-up: ~1 ms keeps CFO bias small enough for bidirectional symmetry on all four links
+// while leaving margin for SPI responder service on the shared bus.
+#define TWR_RESP_DELAY_UUS   1000
 #define TWR_UUS_TO_DWT       63898ULL
 #define TWR_RESP_DELAY_DWT   (TWR_RESP_DELAY_UUS * TWR_UUS_TO_DWT)
 
-// RX timeout after sending Poll, waiting for Response (μs units)
-#define TWR_RX_TIMEOUT_UUS   5000     // 5 ms
+// RX timeout after sending Poll (μs)
+#define TWR_RX_TIMEOUT_UUS   10000
 
 // ── IEEE 802.15.4 frame constants ───────────────────────────────
 #define TWR_FC_DATA          0x8841   // Data frame, PAN ID compress, short addr

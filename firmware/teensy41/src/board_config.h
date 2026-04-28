@@ -44,10 +44,9 @@
 #define CALIBRATION_SAMPLES     500U
 #define FILTER_MAX_PREDICT_DT_S 0.050f
 
-// Timer-driven ADC scan for direct analog microphone bring-up.
-// IMPORTANT: the active Sheet1.NET mainboard routes the tool mic to IC1-17 and the
-// left/right satellite mic lines through U30/U31 analog stages instead of direct A0..A4.
-// Leave this disabled by default until the integrated audio path is mapped in firmware.
+// Timer-driven ADC scan for the 5 microphone channels.
+// This is the first real bring-up sampler for the Teensy board and is intentionally
+// conservative; the future ANC path can replace it with a tighter DMA/ADC backend.
 #define MIC_ADC_RESOLUTION_BITS 12U
 #define MIC_ADC_AVERAGING       1U
 #define MIC_SCAN_PERIOD_US      20U
@@ -56,9 +55,8 @@
 // In single-range bring-up, choose which headset UWB initiates toward the tool.
 #define UWB_SINGLE_INITIATOR_IDX 0U
 
-// Teensy 4.1 IMU wiring (SPI).
-// Active board source of truth: ALTIUM_MAINBOARD_COMPLETE_FINAL_FROM_SHEET1_NET_KR.md
-// Logical pins are used in firmware; comments include the Altium symbol names.
+// Teensy 4.1 IMU on J_IMU_1 — SPI (`Documents/ALTIUM_MAINBOARD_COMPLETE_FINAL_FROM_SHEET1_NET_KR.md`).
+// J_IMU_1: pin4->IC1-13(SCK), 5->MOSI(IC1-11), 6->MISO(IC1-12), 7->CS(IC1-10).
 #define IMU_PIN_CS              10
 #define IMU_PIN_MOSI            11
 #define IMU_PIN_MISO            12
@@ -76,19 +74,22 @@
 #define IMU_R_HI_21             0.0f
 #define IMU_R_HI_22             1.0f
 
-// Teensy 4.1 UWB shared SPI1 bus wiring.
+// Teensy 4.1 UWB shared SPI1 (IC1 pin numbers = Arduino/teensyuino pin IDs on the 4.1).
 #define UWB_PIN_MISO            1
 #define UWB_PIN_MOSI            26
 #define UWB_PIN_SCK             27
 #define UWB_SPI_BAUD            2000000UL
 #define UWB_MAX_RETRIES         2U
 
-// Baseline DW3000 PHY profile for the production headset board.
-// These values match the current design docs and are applied in dwm3000_configure_default().
+// Baseline DW3000 PHY profile — aligned with tested `satellite_tester` / team bench bring-up.
 #define UWB_CHANNEL             5U
+#define UWB_DATA_RATE_6M8       0U       // IEEE 802.15.4 default rate (paired with preamble / PAC)
 #define UWB_SFD_TYPE            0U      // IEEE 802.15.4 short 8-symbol SFD
 #define UWB_PREAMBLE_CODE       9U      // 64 MHz PRF
 #define UWB_PREAMBLE_LENGTH     128U
+#define UWB_SFD_SYMBOLS         8U
+#define UWB_PAC_SIZE            16U     // preamble acquisition chunk (match satellite_tester)
+#define UWB_RX_SFD_TOC          (UWB_PREAMBLE_LENGTH + 1U - UWB_PAC_SIZE + UWB_SFD_SYMBOLS)
 
 // Per-module antenna-delay placeholders.
 // Replace with measured values after on-bench calibration.
@@ -101,35 +102,39 @@
 #define UWB_TOOL_TX_ANT_DLY     16385U
 #define UWB_TOOL_RX_ANT_DLY     16385U
 
-// Per-module UWB control lines.
-// Top UWB: D0/D2/D3 -> Altium RX1/OUT2/LRCLK2.
+// Per-module UWB control lines (`Sheet1.NET` §3 IC1 numbering = Teensy pin IDs).
+//
+// Mainboard U16 CS: schematic IC1-57 (= Teensy “D0”, Arduino pin constant 0 = RX1).
 #define UWB_T_CS                0
-#define UWB_T_RST               2
-#define UWB_T_IRQ               3
+#define UWB_T_RST               2       // IC1-2 -> U16 RSTn
+#define UWB_T_IRQ               3       // IC1-3 -> U16 IRQ
 
-// Left UWB: D4/D29/D6 -> Altium BCLK2/TX7/OUT1D.
+// Satellite L: J_SATELLITE_L1 pins 6/7/8
 #define UWB_L_CS                4
 #define UWB_L_RST               29
 #define UWB_L_IRQ               6
 
-// Right UWB: D36/D37/D30 -> Altium CS_2/CS_3/CRX3.
+// Satellite R: J_SATELLITE_R1 pins 6/7/8
 #define UWB_R_CS                36
 #define UWB_R_RST               37
 #define UWB_R_IRQ               30
 
-// Tool UWB: D24/D25/D28 -> Altium A10/A11/RX7.
+// Satellite Tool: J_SATELLITE_TOOL1 pins 6/7/8
 #define UWB_TOOL_CS             24
 #define UWB_TOOL_RST            25
 #define UWB_TOOL_IRQ            28
 
-// Direct-ADC microphone placeholders kept only for bench experiments on older/simple builds.
-// These are not the active Sheet1.NET integrated-board signal paths.
-#define MIC_TOOL_PIN            A0
-#define MIC_OUT_L_PIN           A1
-#define MIC_OUT_R_PIN           A2
-#define MIC_IN_L_PIN            A3
+// Microphone ADC (optional bring-up — default OFF via `ENABLE_MIC_ADC` in platformio.ini).
+//
+// Unified mainboard Sheet1.NET routes Tool breakout audio `J_SATELLITE_TOOL1-9` through
+// R61+C132 toward `IC1-17`; Left/Right pass through op-amp chains (U30/U31) rather than
+// direct Teensy ADC. Values below support legacy 5-channel stubs if you enable scanning.
+#define MIC_TOOL_PIN            17       // Sheet1.NET tool path -> IC1-17
+#define MIC_OUT_L_PIN           14       // Legacy / spare breakouts (matches Teensy analog labels)
+#define MIC_OUT_R_PIN           15
+#define MIC_IN_L_PIN            16
 #define MIC_IN_R_PIN            A4
-#define MIC_CHANNEL_COUNT       5
+#define MIC_CHANNEL_COUNT       5U
 
 // Headset body-frame UWB locations (metres).
 #define UWB_T_BX                0.00f

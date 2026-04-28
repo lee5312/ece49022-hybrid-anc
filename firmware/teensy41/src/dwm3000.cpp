@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <SPI.h>
+#include <string.h>
 
 #include "board_config.h"
 
@@ -10,10 +11,35 @@ namespace {
 constexpr uint32_t UWB_SPI_BAUD_SLOW = 2UL * 1000UL * 1000UL;
 constexpr uint32_t DW_SYS_CFG_FFEN_BIT = (1u << 0);
 constexpr uint32_t DW_SYS_CFG_PHR_MODE_BIT = (1u << 4);
+constexpr uint32_t DW_SYS_CFG_PHR_6M8_BIT = (1u << 5);
 constexpr uint32_t DW_TX_FCTRL_TXBR_BIT = (1u << 10);
 constexpr uint32_t DW_TX_FCTRL_TR_BIT = (1u << 11);
 constexpr uint32_t DW_TX_FCTRL_TXPSR_MASK = (0xFu << 12);
 constexpr uint16_t DW_CHAN_CTRL_RF_CHAN_CH9_BIT = (1u << 0);
+constexpr uint32_t DW_SEQ_CTRL_AINIT2IDLE_BIT = (1u << 8);
+constexpr uint32_t DW_RF_TX_CTRL_2_CH5 = 0x1C071134u;
+constexpr uint16_t DW_PLL_CFG_CH5 = 0x1F3Cu;
+constexpr uint32_t DW_TX_POWER_DEFAULT = 0x82828282u;
+constexpr uint16_t DW_DGC_CFG_CH5 = 0xE4F5u;
+constexpr uint32_t DW_DGC_CFG0_CH5 = 0x10000240u;
+constexpr uint32_t DW_DGC_CFG1_CH5 = 0x1B6DA489u;
+constexpr uint32_t DW_DGC_LUT_0_CH5 = 0x0001C0FDu;
+constexpr uint32_t DW_DGC_LUT_1_CH5 = 0x0001C43Eu;
+constexpr uint32_t DW_DGC_LUT_2_CH5 = 0x0001C6BEu;
+constexpr uint32_t DW_DGC_LUT_3_CH5 = 0x0001C77Eu;
+constexpr uint32_t DW_DGC_LUT_4_CH5 = 0x0001CF36u;
+constexpr uint32_t DW_DGC_LUT_5_CH5 = 0x0001CFB5u;
+constexpr uint32_t DW_DGC_LUT_6_CH5 = 0x0001CFF5u;
+constexpr uint32_t DW_DTUNE3_OPTIMAL = 0xAF5F35CCu;
+constexpr uint8_t DW_LDO_RLOAD_OPTIMAL = 0x14u;
+constexpr uint32_t DW_TX_CTRL_LO_DEFAULT = 0x040E0767u;
+constexpr uint8_t DW_PLL_CAL_LOCK_DELAY = 0x81u;
+constexpr uint16_t DW_LDO_CTRL_PGF_MASK = 0x0105u;
+constexpr uint32_t DW_RX_CAL_CFG_START = 0x00020001u;
+constexpr uint32_t DW_RX_CAL_FAIL = 0x1FFFFFFFu;
+// PGF calibration can take up to ~150us in worst case (cold start, low temperature).
+// Each retry waits 20us, so 8 retries gives us ~160us of headroom.
+constexpr uint8_t DW_PGF_MAX_RETRIES = 8u;
 
 uint32_t s_bus_baud_hz = UWB_SPI_BAUD_SLOW;
 
@@ -50,6 +76,22 @@ uint8_t txpsr_field_from_symbols(uint16_t preamble_symbols)
         return 0x3u;
     default:
         return 0x5u;
+    }
+}
+
+uint16_t pac_field_from_symbols(uint16_t pac_symbols)
+{
+    switch (pac_symbols) {
+    case 8:
+        return 0x0u;
+    case 16:
+        return 0x1u;
+    case 32:
+        return 0x2u;
+    case 4:
+        return 0x3u;
+    default:
+        return 0x0u;
     }
 }
 
@@ -95,12 +137,14 @@ int build_header(uint32_t reg_addr, bool is_read, uint8_t *hdr)
         hdr[0] |= 0x80u;
     }
 
-    if (off <= 127) {
-        hdr[1] = static_cast<uint8_t>(off & 0x7Fu);
+    if (off <= 0x7Fu) {
+        hdr[0] |= static_cast<uint8_t>((off >> 6) & 0x1u);
+        hdr[1] = static_cast<uint8_t>((off & 0x3Fu) << 2);
         return 2;
     }
 
-    hdr[1] = static_cast<uint8_t>(0x80u | (off & 0x7Fu));
+    hdr[0] |= static_cast<uint8_t>((off >> 6) & 0x1u);
+    hdr[1] = static_cast<uint8_t>(0x80u | ((off & 0x3Fu) << 2));
     hdr[2] = static_cast<uint8_t>((off >> 7) & 0xFFu);
     return 3;
 }
@@ -131,8 +175,12 @@ void dwm3000_read_reg(dwm3000_inst_t *inst, uint32_t reg_addr,
     for (int i = 0; i < hdr_len; i++) {
         bus->transfer(hdr[i]);
     }
-    for (size_t i = 0; i < len; i++) {
-        buf[i] = bus->transfer(0x00);
+    if (len > 0) {
+        // Single bulk transfer instead of one byte-at-a-time. Teensy 4.1's
+        // SPI driver clocks the TX buffer out and writes the RX buffer back
+        // into the same memory; pre-zero so the chip sees 0x00 dummy bytes.
+        memset(buf, 0, len);
+        bus->transfer(buf, len);
     }
     cs_deselect(inst);
     bus->endTransaction();
@@ -174,6 +222,25 @@ void dwm3000_write32(dwm3000_inst_t *inst, uint32_t reg_addr, uint32_t val)
         static_cast<uint8_t>(val >> 8),
         static_cast<uint8_t>(val >> 16),
         static_cast<uint8_t>(val >> 24),
+    };
+    dwm3000_write_reg(inst, reg_addr, buf, sizeof(buf));
+}
+
+uint32_t dwm3000_read24(dwm3000_inst_t *inst, uint32_t reg_addr)
+{
+    uint8_t buf[3];
+    dwm3000_read_reg(inst, reg_addr, buf, sizeof(buf));
+    return static_cast<uint32_t>(buf[0]) |
+           (static_cast<uint32_t>(buf[1]) << 8) |
+           (static_cast<uint32_t>(buf[2]) << 16);
+}
+
+void dwm3000_write24(dwm3000_inst_t *inst, uint32_t reg_addr, uint32_t val)
+{
+    const uint8_t buf[3] = {
+        static_cast<uint8_t>(val),
+        static_cast<uint8_t>(val >> 8),
+        static_cast<uint8_t>(val >> 16),
     };
     dwm3000_write_reg(inst, reg_addr, buf, sizeof(buf));
 }
@@ -248,7 +315,32 @@ bool dwm3000_init(dwm3000_inst_t *inst)
     pinMode(inst->pin_irq, INPUT);
 
     inst->ready = false;
+    inst->tx_ant_dly = DW_DEFAULT_ANT_DLY;
+    inst->rx_ant_dly = DW_DEFAULT_ANT_DLY;
     dwm3000_hard_reset(inst);
+
+    const uint32_t start_ms = millis();
+    while ((millis() - start_ms) < 20u) {
+        const uint64_t status = dwm3000_read_sys_status(inst);
+        if (status & DW_SPIRDY_BIT) {
+            break;
+        }
+        delayMicroseconds(100);
+    }
+
+    uint32_t seq_ctrl = dwm3000_read32(inst, DW_SEQ_CTRL);
+    seq_ctrl |= DW_SEQ_CTRL_AINIT2IDLE_BIT;
+    dwm3000_write32(inst, DW_SEQ_CTRL, seq_ctrl);
+
+    const uint32_t idle_start_ms = millis();
+    while ((millis() - idle_start_ms) < 20u) {
+        const uint32_t sys_state = dwm3000_read_sys_state(inst);
+        const uint32_t pmsc_state = (sys_state >> 16) & 0xFFu;
+        if (pmsc_state == 0x03u) {
+            break;
+        }
+        delayMicroseconds(100);
+    }
 
     const uint32_t dev_id = dwm3000_read_dev_id(inst);
     if (((dev_id >> 16) != 0xDECAu) || (((dev_id >> 8) & 0xFFu) != 0x03u)) {
@@ -264,17 +356,52 @@ void dwm3000_configure_default(dwm3000_inst_t *inst)
 {
     uint32_t sys_cfg = dwm3000_read32(inst, DW_SYS_CFG);
     sys_cfg &= ~(DW_SYS_CFG_FFEN_BIT | DW_SYS_CFG_PHR_MODE_BIT);
+    if (UWB_DATA_RATE_6M8) {
+        sys_cfg |= DW_SYS_CFG_PHR_6M8_BIT;
+    } else {
+        sys_cfg &= ~DW_SYS_CFG_PHR_6M8_BIT;
+    }
     dwm3000_write32(inst, DW_SYS_CFG, sys_cfg);
 
     uint32_t tx_fctrl = dwm3000_read32(inst, DW_TX_FCTRL);
     tx_fctrl &= ~(DW_TX_FCTRL_TXBR_BIT | DW_TX_FCTRL_TR_BIT | DW_TX_FCTRL_TXPSR_MASK);
-    tx_fctrl |= DW_TX_FCTRL_TXBR_BIT;
+    if (UWB_DATA_RATE_6M8) {
+        tx_fctrl |= DW_TX_FCTRL_TXBR_BIT;
+    }
     tx_fctrl |= DW_TX_FCTRL_TR_BIT;
     tx_fctrl |= static_cast<uint32_t>(txpsr_field_from_symbols(UWB_PREAMBLE_LENGTH)) << 12;
     dwm3000_write32(inst, DW_TX_FCTRL, tx_fctrl);
 
     dwm3000_write16(inst, DW_TX_FCTRL_HI, 0u);
     dwm3000_write16(inst, DW_CHAN_CTRL, make_chan_ctrl_value());
+
+    if (UWB_CHANNEL == 5U) {
+        dwm3000_write16(inst, DW_DGC_CFG, DW_DGC_CFG_CH5);
+        dwm3000_write32(inst, DW_DGC_CFG0, DW_DGC_CFG0_CH5);
+        dwm3000_write32(inst, DW_DGC_CFG1, DW_DGC_CFG1_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_0, DW_DGC_LUT_0_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_1, DW_DGC_LUT_1_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_2, DW_DGC_LUT_2_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_3, DW_DGC_LUT_3_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_4, DW_DGC_LUT_4_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_5, DW_DGC_LUT_5_CH5);
+        dwm3000_write32(inst, DW_DGC_LUT_6, DW_DGC_LUT_6_CH5);
+    }
+
+    dwm3000_write32(inst, DW_TX_CTRL_LO, DW_TX_CTRL_LO_DEFAULT);
+    dwm3000_write32(inst, DW_RF_TX_CTRL_2, DW_RF_TX_CTRL_2_CH5);
+    dwm3000_write16(inst, DW_PLL_CFG, DW_PLL_CFG_CH5);
+    dwm3000_write8(inst, DW_PLL_CAL, DW_PLL_CAL_LOCK_DELAY);
+    dwm3000_write32(inst, DW_TX_POWER, DW_TX_POWER_DEFAULT);
+    dwm3000_write32(inst, DW_DTUNE3, DW_DTUNE3_OPTIMAL);
+    dwm3000_write8(inst, DW_LDO_RLOAD, DW_LDO_RLOAD_OPTIMAL);
+
+    uint16_t dtune0 = dwm3000_read16(inst, DW_DTUNE0);
+    dtune0 &= ~0x0003u;
+    dtune0 |= pac_field_from_symbols(UWB_PAC_SIZE);
+    dtune0 &= ~(1u << 4);
+    dwm3000_write16(inst, DW_DTUNE0, dtune0);
+    dwm3000_write16(inst, DW_RX_SFD_TOC, static_cast<uint16_t>(UWB_RX_SFD_TOC));
     dwm3000_set_antenna_delay(inst, DW_DEFAULT_ANT_DLY, DW_DEFAULT_ANT_DLY);
     dwm3000_write32(inst, DW_PANADR, 0x0000DECAu);
 }
@@ -287,6 +414,46 @@ void dwm3000_set_antenna_delay(dwm3000_inst_t *inst,
     uint32_t cia = dwm3000_read32(inst, DW_CIA_CONF);
     cia = (cia & 0xFFFF0000u) | static_cast<uint32_t>(rx_delay);
     dwm3000_write32(inst, DW_CIA_CONF, cia);
+
+    // Cache so SS-TWR responder logic can advertise the actual antenna
+    // emission time (DX_TIME + tx_ant_dly) instead of just DX_TIME.
+    inst->tx_ant_dly = tx_delay;
+    inst->rx_ant_dly = rx_delay;
+}
+
+int32_t dwm3000_run_pgf_cal(dwm3000_inst_t *inst)
+{
+    const uint16_t ldo_ctrl_prev = dwm3000_read16(inst, DW_LDO_CTRL);
+    dwm3000_write16(inst, DW_LDO_CTRL, static_cast<uint16_t>(ldo_ctrl_prev | DW_LDO_CTRL_PGF_MASK));
+    delayMicroseconds(20);
+
+    dwm3000_write32(inst, DW_RX_CAL_CFG, DW_RX_CAL_CFG_START);
+    dwm3000_write8(inst, DW_RX_CAL_CFG, static_cast<uint8_t>(DW_RX_CAL_CFG_START | 0x10u));
+
+    bool done = false;
+    for (uint8_t i = 0; i < DW_PGF_MAX_RETRIES; i++) {
+        delayMicroseconds(20);
+        if (dwm3000_read8(inst, DW_RX_CAL_STS) == 1u) {
+            done = true;
+            break;
+        }
+    }
+
+    dwm3000_write8(inst, DW_RX_CAL_CFG, 0u);
+    dwm3000_write8(inst, DW_RX_CAL_STS, 1u);
+    dwm3000_write8(inst, DW_RX_CAL_CFG_2, 1u);
+    dwm3000_write16(inst, DW_LDO_CTRL, ldo_ctrl_prev);
+
+    if (!done) {
+        return -3;
+    }
+    if (dwm3000_read32(inst, DW_RX_CAL_RESI) == DW_RX_CAL_FAIL) {
+        return -4;
+    }
+    if (dwm3000_read32(inst, DW_RX_CAL_RESQ) == DW_RX_CAL_FAIL) {
+        return -5;
+    }
+    return 0;
 }
 
 void dwm3000_write_tx_data(dwm3000_inst_t *inst,
@@ -324,7 +491,7 @@ void dwm3000_start_rx(dwm3000_inst_t *inst, uint32_t timeout_uus)
 {
     uint32_t cfg = dwm3000_read32(inst, DW_SYS_CFG);
     if (timeout_uus > 0) {
-        dwm3000_write32(inst, DW_RX_FWTO, timeout_uus);
+        dwm3000_write24(inst, DW_RX_FWTO, timeout_uus & 0x00FFFFFFu);
         cfg |= (1u << 9);
     } else {
         cfg &= ~(1u << 9);
@@ -389,6 +556,11 @@ uint64_t dwm3000_read_sys_time(dwm3000_inst_t *inst)
 {
     const uint32_t time32 = dwm3000_read32(inst, DW_SYS_TIME);
     return static_cast<uint64_t>(time32) << 8;
+}
+
+uint32_t dwm3000_read_sys_state(dwm3000_inst_t *inst)
+{
+    return dwm3000_read32(inst, DW_SYS_STATE);
 }
 
 uint16_t dwm3000_get_rx_frame_len(dwm3000_inst_t *inst)
