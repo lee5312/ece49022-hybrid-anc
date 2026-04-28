@@ -11,7 +11,7 @@ public:
 
     void begin();
     bool available() const;
-    const int16_t* read();
+    const int32_t* read();
 
     void isr();
 
@@ -22,13 +22,13 @@ private:
     // =========================
     // Explicit ping-pong buffers for clarity and safety.
     // DMA writes to one while the CPU reads from the other.
-    int16_t dma_buffer[AUDIO_BLOCK * AUDIO_CHANNELS_IN * 2];
-    int16_t bufferA[AUDIO_BLOCK * AUDIO_CHANNELS_IN];
-    int16_t bufferB[AUDIO_BLOCK * AUDIO_CHANNELS_IN];
+    int32_t dma_buffer[AUDIO_BLOCK * AUDIO_CHANNELS_IN * 2];
+    int32_t bufferA[AUDIO_BLOCK * AUDIO_CHANNELS_IN];
+    int32_t bufferB[AUDIO_BLOCK * AUDIO_CHANNELS_IN];
 
     // Pointers to manage the buffer swap
-    int16_t* writeBuffer;
-    int16_t* readBuffer;
+    int32_t* writeBuffer;
+    int32_t* readBuffer;
 
     // Flag set by ISR when a buffer is ready for processing
     volatile bool bufferReady = false;

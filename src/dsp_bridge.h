@@ -8,10 +8,10 @@ class DSPBridge {
 public:
   DSPBridge(); 
   void begin();
-    void process(const int16_t* input, float tool_adc_val,
-                 int16_t* speech_out, 
-                 int16_t* anti_noise_out, 
-                 int16_t* anti_noise_90_out);
+    void process(const int32_t* input, float tool_adc_val,
+                 int32_t* speech_out, 
+                 int32_t* anti_noise_out, 
+                 int32_t* anti_noise_90_out);
 private:
   float gain = 1.0f;
 

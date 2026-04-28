@@ -21,10 +21,10 @@ void DSPBridge::begin() {
 }
 
 // UPDATED IMPLEMENTATION: Fills all three distinct output buffers
-void DSPBridge::process(const int16_t* input, float tool_adc_val,
-                     int16_t* speech_out, 
-                     int16_t* anti_noise_out, 
-                     int16_t* anti_noise_90_out) {
+void DSPBridge::process(const int32_t* input, float tool_adc_val,
+                     int32_t* speech_out, 
+                     int32_t* anti_noise_out, 
+                     int32_t* anti_noise_90_out) {
 
     // Per-sample variables
     float cal_L, cal_R;

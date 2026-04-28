@@ -29,6 +29,7 @@ void SAIInput::begin() {
     configDMA();
     
     // IMPORTANT: Enable the SAI receiver AFTER the DMA is ready.
+    Serial.println("Enabling SAIInput");
     // Also, enable the transmitter to generate clocks.
     I2S1_RCSR |= I2S_RCSR_RE;
     I2S1_TCSR |= I2S_TCSR_TE | I2S_TCSR_BCE; // TX provides the master clock
@@ -49,26 +50,7 @@ void SAIInput::configSAI1() {
     // (Without this, SAI1 hardware is OFF)
     CCM_CCGR5 |= CCM_CCGR5_SAI1(CCM_CCGR_ON);
 
-    // -------------------------
-    // DISABLE RECEIVER BEFORE CONFIG
-    // -------------------------
-    // We must disable SAI before changing its settings
-    I2S1_TCSR = 0;
-    I2S1_RCSR = 0;
-
-    // -------------------------
-    // == TRANSMITTER CONFIGURATION (Clock Master) ==
-    // -------------------------
-    // The TX side will generate the master BCLK and LRCLK for the entire audio bus.
-    I2S1_TCR2 = I2S_TCR2_SYNC(0) |  // Asynchronous mode
-                I2S_TCR2_BCP |     // Bit clock is provided by SAI
-                I2S_TCR2_BCD |  // Bit clock is output from SAI
-                I2S_TCR2_DIV(0);   // BCLK = MCLK / 2
-    I2S1_TCR4 = I2S_TCR4_FSP |     // Frame sync polarity
-                I2S_TCR4_FSD |  // Frame sync is output from SAI
-                I2S_TCR4_FRSZ(AUDIO_CHANNELS_IN - 1); // ***FIXED: Frame is 4 words long for TDM4***
-
-    // -------------------------
+       // -------------------------
     // FIFO WATERMARK CONFIG
     // -------------------------
     // RFW = when FIFO triggers DMA request
@@ -79,7 +61,7 @@ void SAIInput::configSAI1() {
     // -------------------------
     I2S1_RCR2 =
         I2S_RCR2_SYNC(0) |   // asynchronous mode (SAI generates its own timing)
-        I2S_RCR2_BCP |       // bit clock polarity (data sampled on opposite edge)
+        I2S_RCR2_BCP |       // bit clock polarity (data sampled on opposite edge)     May remmove this if clock not working
         I2S_RCR2_MSEL(1);    // clock source = PLL (Audio PLL)
 
     // -------------------------
@@ -92,17 +74,18 @@ void SAIInput::configSAI1() {
     // FRAME FORMAT CONFIGURATION
     // -------------------------
     I2S1_RCR4 =
-        I2S_RCR4_FRSZ(AUDIO_CHANNELS_IN - 1) |   // frame size = 2 words (stereo frame)
-        I2S_RCR4_SYWD(0) |  // sync width = 1-bit word
-        I2S_RCR4_MF;         // MSB first format
+        I2S_RCR4_FRSZ(1) |   // frame size = 2 words (stereo frame)
+        I2S_RCR4_SYWD(31) |  // sync width = 32-bit word
+        I2S_RCR4_MF |       // MSB first format
+        I2S_RCR4_FSP ;     // frame sync pulse = active low and early (data starts on falling edge of frame sync)
 
     // -------------------------
     // WORD CONFIGURATION
     // -------------------------
     I2S1_RCR5 =
-        I2S_RCR5_WNW(15) |   // word N width = 32 bits
-        I2S_RCR5_W0W(15) |   // word 0 width = 32 bits
-        I2S_RCR5_FBT(15);    // first bit transmitted = MSB
+        I2S_RCR5_WNW(23) |   // word N width = 32 bits
+        I2S_RCR5_W0W(23) |   // word 0 width = 32 bits
+        I2S_RCR5_FBT(23);    // first bit transmitted = MSB
 
     // -------------------------
     // ENABLE RECEIVER + CLOCK
@@ -110,7 +93,7 @@ void SAIInput::configSAI1() {
     I2S1_RCSR = I2S_RCSR_FRDE; // Enable FIFO Request DMA
 
     // Enable the first 4 word slots in the TDM frame
-    I2S1_RMR = 0x000F;
+    I2S1_RMR = 0x0003;
 }
 
 
@@ -174,31 +157,28 @@ void SAIInput::dmaISR(void* arg) {
 // INSTANCE-SPECIFIC ISR
 // ======================================================
 void SAIInput::isr() {
+    
+    dma.clearInterrupt(); // Always clear the interrupt flag first.
 
-    uint32_t dma_csr = dma.TCD->CSR; // get the CSR to check which interrupt occurred
-    // Clear interrupt flag so DMA can continue
-    dma.clearInterrupt();
+    // This is an efficient way to check the DMA destination address.
+    // It determines which half of the circular buffer has just been filled.
+    uint32_t* current_dma_dest = (uint32_t*)dma.destinationAddress();
+    uint32_t* buffer_midpoint = dma_buffer + (AUDIO_BLOCK * AUDIO_CHANNELS_IN);
 
-    if (dma_csr & DMA_TCD_CSR_DREQ) { // if we are just disabling.. return
-        return;
+    if (current_dma_dest >= buffer_midpoint) {
+        // DMA is currently writing to the second half (buffer B),
+        // so the first half (buffer A) is ready for processing.
+        readBuffer = dma_buffer;
+    } else {
+        // DMA is currently writing to the first half (buffer A),
+        // so the second half (buffer B) is ready for processing.
+        readBuffer = buffer_midpoint;
     }
+    
+    bufferReady = true; // Set the flag to notify the main loop.
 
-   if ( (dma_csr & DMA_TCD_CSR_INTMAJOR) || (dma_csr & DMA_TCD_CSR_INTHALF) ) {
-        int16_t* in = (int16_t*)dma.destinationAddress();
-        int16_t* out = (int16_t*)dma.sourceAddress();
-
-        if ( in >= dma_buffer + (AUDIO_BLOCK * AUDIO_CHANNELS_IN) ) {
-            // DMA is writing to the second half, so we can read from the first
-            readBuffer = dma_buffer;
-        } else {
-            // DMA is writing to the first half, so we can read from the second
-            readBuffer = dma_buffer + (AUDIO_BLOCK * AUDIO_CHANNELS_IN);
-        }
-        bufferReady = true;
-    }
-
-    // Enable DMA channel
-    dma.enable();
+    // This is not needed for circular DMA. The hardware handles it.
+    // dma.enable(); << REMOVE
 }
 
 
@@ -214,7 +194,7 @@ bool SAIInput::available() const {
 // PUBLIC API: READ AUDIO BUFFER
 // ======================================================
 // Returns pointer to raw interleaved audio samples
-const int16_t* SAIInput::read() {
+const int32_t* SAIInput::read() {
 
     if (!bufferReady) {
         return nullptr; // No new data, return null
