@@ -28,7 +28,7 @@ private:
     // The DMA buffer must now be large enough to hold interleaved data for all channels.
     // Size = samples_per_block * num_stereo_pairs * channels_per_pair * num_halves
     // Size = 128 * 3 * 2 * 2 = 1536
-    int32_t dma_buffer[AUDIO_BLOCK * NUM_STEREO_PAIRS * 2]; 
+    int32_t dma_buffer[AUDIO_BLOCK * NUM_STEREO_PAIRS * 2 * 2]; 
 
     int32_t* buffer_ptr_a;
     int32_t* buffer_ptr_b;

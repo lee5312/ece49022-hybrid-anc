@@ -25,10 +25,10 @@ void SAIOutput::configSAI() {
     // BCLK = SampleRate * FrameSize * WordBits = 48000 * 6 * 32 is wrong.
     // BCLK is for ONE word, so 48000 * 32 * 2 = 3.072MHz is the target.
     // Divisor = (12.288MHz MCLK / 3.072MHz BCLK) - 1 = 3.
-    sai->TCR2 = I2S_TCR2_BCD | I2S_TCR2_BCP | I2S_TCR2_MSEL(0) | I2S_TCR2_DIV(3);
+    sai->TCR2 = I2S_TCR2_BCD | I2S_TCR2_BCP | I2S_TCR2_MSEL(0) | I2S_TCR2_DIV(24);
 
     // TCR4: Frame. The frame size is the number of words. 3 pairs * 2 channels = 6 words.
-    sai->TCR4 = I2S_TCR4_FSP | I2S_TCR4_FSD | I2S_TCR4_SYWD(31) | I2S_TCR4_FRSZ(5); // FRSZ is (num_words - 1)
+    sai->TCR4 = I2S_TCR4_FSP | I2S_TCR4_FSD | I2S_TCR4_SYWD(31) | I2S_TCR4_FRSZ(1); // FRSZ is (num_words - 1)
 
     // TCR3: CRITICAL - Enable 3 data lines. A bitmask where each bit enables a data line.
     // 0b111 enables TDR[0], TDR[1], and TDR[2].
@@ -48,7 +48,7 @@ void SAIOutput::configDMA() {
     dma.destination((volatile uint32_t&)sai->TDR[0]);
     
     // CORRECTED: The buffer size MUST account for all 3 stereo pairs.
-    dma.sourceBuffer(dma_buffer, AUDIO_BLOCK * NUM_STEREO_PAIRS * 2 * sizeof(int32_t));
+    dma.sourceBuffer(dma_buffer, AUDIO_BLOCK * NUM_STEREO_PAIRS * 2 * 2 * sizeof(int32_t));
     
     dma.transferSize(4);
     dma.triggerAtHardwareEvent(DMAMUX_SOURCE_SAI1_TX);

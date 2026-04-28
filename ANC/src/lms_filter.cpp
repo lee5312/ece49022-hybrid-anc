@@ -1,9 +1,11 @@
+#include <Arduino.h>
 #include "lms_filter.h"
 #include <cstring>
 
 
 // LMS / Hilbert parameters
 const int M = 128;
+int x = 0; // For debugging
 float mu = 0.005f;
 
 // LMS variables
@@ -75,13 +77,15 @@ void LMSFilter::init() {
 float LMSFilter::process(float reference_input, float measured_signal) {
     // Store newest X sample
     x_buffer[head_x] = reference_input;
+    
 
+    Serial.printf("Processing new sample...%d\n", x++);
     // --- LMS Filter ---
     // 1. Compute estimated output (y_hat)
     y_hat = 0.0f;
     int idx = head_x;
-    for (int i = 0; i < M; i++) {
-        y_hat += g[i] * x_buffer[idx--];
+    for (int j = 0; j < M; j++) {
+        y_hat += g[j] * x_buffer[idx--];
         if (idx < 0) idx = M - 1;
     }
 

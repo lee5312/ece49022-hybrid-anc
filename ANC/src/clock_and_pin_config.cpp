@@ -98,6 +98,7 @@ void init_audio_clocks_and_pins() {
     // We need to configure the data pin for SAI1 as well. Let's use Pin 22.
     // DAC 1 Data (SAI1) on Pin 7 (Processor Pad: GPIO_B1_01)
     IOMUXC_SW_MUX_CTL_PAD_GPIO_B1_01 = 3; // ALT3 = SAI1_TX_DATA00
+    IOMUXC_SW_PAD_CTL_PAD_GPIO_B1_01 = 0x10B0; // Set drive strength and enable pull-up if needed
 
     // DAC 2 Data (SAI2) on Pin 9 (Processor Pad: GPIO_AD_B0_11)
     IOMUXC_SW_MUX_CTL_PAD_GPIO_B0_11 = 3; // ALT3 = SAI2_TX_DATA02
@@ -110,37 +111,37 @@ void init_audio_clocks_and_pins() {
     // IOMUXC_SAI1_TX_DATA2_SELECT_INPUT = 1; // For Pin 9
 }
 
-void configure_sai_for_clock_generation() {
-    // Configure the transmitter for master mode.
-    // BCD=1 (Bit Clock is output), BCE=1 (Bit Clock is enabled)
-    // --- Configure TCR2: Bit Clock Configuration ---
-    // MCLK is the input. BCLK = MCLK / (DIV + 1)
-    // We want to control clock generation ourselves, so we set it to master mode.
-    // Let's target a 3.072 MHz BCLK for 48kHz, 32-bit, stereo.
-    // BCLK = 3.072 MHz MHz. MCLK = 23.134 MHz.
-    // Divisor = (23.134 / 3.072) - 1 = 6.55... so we'll use 7 (DIV=6)
-    // This will result in BCLK = 23.134 / 7 = 3.29 MHz, which is close.
-    I2S1_TCSR = 0;
+// void configure_sai_for_clock_generation() {
+//     // Configure the transmitter for master mode.
+//     // BCD=1 (Bit Clock is output), BCE=1 (Bit Clock is enabled)
+//     // --- Configure TCR2: Bit Clock Configuration ---
+//     // MCLK is the input. BCLK = MCLK / (DIV + 1)
+//     // We want to control clock generation ourselves, so we set it to master mode.
+//     // Let's target a 3.072 MHz BCLK for 48kHz, 32-bit, stereo.
+//     // BCLK = 3.072 MHz MHz. MCLK = 23.134 MHz.
+//     // Divisor = (23.134 / 3.072) - 1 = 6.55... so we'll use 7 (DIV=6)
+//     // This will result in BCLK = 23.134 / 7 = 3.29 MHz, which is close.
+//     I2S1_TCSR = 0;
 
-    I2S1_TCR2 = I2S_TCR2_BCD 
-                | I2S_TCR2_BCP
-                | I2S_TCR2_MSEL(1) // Clock source = PLL (Audio PLL)
-                | I2S_TCR2_DIV(1); // BCP for clock polarity
+//     I2S1_TCR2 = I2S_TCR2_BCD 
+//                 | I2S_TCR2_BCP
+//                 | I2S_TCR2_MSEL(1) // Clock source = PLL (Audio PLL)
+//                 | I2S_TCR2_DIV(1); // BCP for clock polarity
 
-                  // --- Configure TCR3: Word Select (LRCLK) Configuration ---
-    // Disable word flag during config
-    I2S1_TCR3 &= ~I2S_TCR3_TCE; // Disable Transmit Channel Enable to configure
-    I2S1_TCR3 = 0; // Clear it
+//                   // --- Configure TCR3: Word Select (LRCLK) Configuration ---
+//     // Disable word flag during config
+//     I2S1_TCR3 &= ~I2S_TCR3_TCE; // Disable Transmit Channel Enable to configure
+//     I2S1_TCR3 = 0; // Clear it
 
-    I2S1_TCR4 = I2S_TCR4_FSP |     // Frame sync polarity
-                I2S_TCR4_FSD |  // Frame sync is output from SAI
-                I2S_TCR4_SYWD(31) | // Sync width = 32 bits (full frame)
-                I2S_TCR4_FRSZ(1); // Frame is 2 words long (stereo frame)
+//     I2S1_TCR4 = I2S_TCR4_FSP |     // Frame sync polarity
+//                 I2S_TCR4_FSD |  // Frame sync is output from SAI
+//                 I2S_TCR4_SYWD(31) | // Sync width = 32 bits (full frame)
+//                 I2S_TCR4_FRSZ(1); // Frame is 2 words long (stereo frame)
 
-    I2S1_TCR5 = I2S_TCR5_WNW(31) |   // Word N width = 32 bits
-                I2S_TCR5_W0W(31) |   // Word 0 width = 32 bits
-                I2S_TCR5_FBT(31);    // First bit transmitted = MSB (bit 31)
+//     I2S1_TCR5 = I2S_TCR5_WNW(31) |   // Word N width = 32 bits
+//                 I2S_TCR5_W0W(31) |   // Word 0 width = 32 bits
+//                 I2S_TCR5_FBT(31);    // First bit transmitted = MSB (bit 31)
     
-    // Enable the Transmitter (TE) and Bit Clock (BCE)
-    I2S1_TCSR = I2S_TCSR_TE | I2S_TCSR_BCE;
-}
+//     // Enable the Transmitter (TE) and Bit Clock (BCE)
+//     I2S1_TCSR = I2S_TCSR_TE | I2S_TCSR_BCE;
+// }

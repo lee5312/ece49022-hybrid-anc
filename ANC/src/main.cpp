@@ -29,4 +29,5 @@ void loop() {
     // The DSPEngine will generate its own internal test tone,
     // process it, and send it to the output.
     dsp.process(); 
+    delay(2000); // Add a delay to slow down the loop for testing.
 }
