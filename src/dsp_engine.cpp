@@ -11,7 +11,12 @@ DSPEngine::DSPEngine() :
     // The constructor no longer takes a boolean 'isMaster' flag.
     output(&I2S1), 
     adc_reader(A3),
-    dsp_bridge()
+    dsp_bridge(),
+
+     // === INITIALIZE THE NEW TEST TONE VARIABLES HERE ===
+    test_input_phase(0.0),
+    test_input_increment(2.0 * PI * 440.0 / AUDIO_SAMPLE_RATE)
+    // === END OF INITIALIZATION ===
 {}
 
 // ======================================================
@@ -30,20 +35,32 @@ void DSPEngine::begin() {
     
     // 3. Initialize the DSP logic
     dsp_bridge.begin();
+
 }
 
 // ======================================================
 // MAIN DSP PROCESSING FUNCTION
 // ======================================================
 void DSPEngine::process() {
-    if (input.available()) {
-        const int32_t* in_buffer = input.read();
-        if (!in_buffer) return;
+    // if (input.available()) {
+    //     const int32_t* in_buffer = input.read();
+    //     if (!in_buffer) return;
+
+    for (int i = 0; i < AUDIO_BLOCK; i++) {
+        int32_t sample = (int32_t)(sin(test_input_phase) * 1000000000.0);
+        test_input_phase += test_input_increment;
+        if (test_input_phase >= 2.0 * PI) {
+            test_input_phase -= 2.0 * PI;
+        }
+        // Write the same sample to both Left and Right channels of the test buffer
+        test_input_buffer[i * AUDIO_CHANNELS_IN + 0] = sample; // Left
+        test_input_buffer[i * AUDIO_CHANNELS_IN + 1] = sample; // Right
+    }
 
         float adc_value = adc_reader.read();
 
         // The DSP bridge still correctly fills our three separate buffers.
-        dsp_bridge.process(in_buffer, adc_value, 
+        dsp_bridge.process(test_input_buffer, adc_value, 
                            speech_buffer, 
                            anti_noise_buffer, 
                            anti_noise_90_buffer);
@@ -60,5 +77,5 @@ void DSPEngine::process() {
         // DAC 2 (e.g., Pin 32) -> Shifted Anti-Noise
         // DAC 3 (e.g., Pin 9) -> Clean Speech
         output.write(anti_noise_buffer, anti_noise_90_buffer, speech_buffer);
-    }
+    //}
 }

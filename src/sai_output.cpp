@@ -62,6 +62,8 @@ void SAIOutput::configDMA() {
 void SAIOutput::write(const int32_t* dac1_data, const int32_t* dac2_data, const int32_t* dac3_data) {
     int32_t* target_buffer;
 
+    Serial.println("SAIOutput::write called with new buffers");
+
     // CORRECTED: This logic correctly finds the free buffer.
     if ((uint32_t)dma.sourceAddress() >= (uint32_t)buffer_ptr_b) {
         target_buffer = buffer_ptr_a;

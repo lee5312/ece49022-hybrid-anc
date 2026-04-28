@@ -1,6 +1,25 @@
 #include "lms_filter.h"
 #include <cstring>
 
+
+// LMS / Hilbert parameters
+const int M = 128;
+float mu = 0.005f;
+
+// LMS variables
+float g[M] = {0.0f};
+float X[M] = {0.0f};
+
+// Hilbert buffer for anti-noise
+float anti_buf[M] = {0.0f};
+
+// Outputs
+float e = 0.0f;
+float y_hat = 0.0f;
+float anti_noise = 0.0f;
+float anti_noise_90 = 0.0f;
+
+
 // MATLAB-generated Hilbert coefficients (static const, defined in the class)
 const float LMSFilter::h_hilbert[128] = {
  -0.0000130075f, -0.0000022259f, -0.0000226577f, -0.0000060656f, -0.0000418038f, -0.0000130800f,

@@ -32,7 +32,7 @@ void DSPBridge::process(const int32_t* input, float tool_adc_val,
     float anti_noise_L, anti_noise_R;
     float anti_noise_90_L, anti_noise_90_R;
 
-    Serial.println("DSP Bridge Initialized.");
+    //Serial.println("DSP Bridge Process.");
 
     for (int i = 0; i < AUDIO_BLOCK; i++) {
         // 1. DEINTERLEAVE
@@ -42,26 +42,27 @@ void DSPBridge::process(const int32_t* input, float tool_adc_val,
 
         // 2. PROCESS with LMS filter for Left and Right channels
         speech_L = lms_left.process(tool_adc_val, cal_L);
-        speech_R = lms_right.process(tool_adc_val, cal_R);
+        //speech_R = lms_right.process(tool_adc_val, cal_R);
         
         // 3. GET the other signals from the filters
         anti_noise_L = lms_left.get_anti_noise();
-        anti_noise_R = lms_right.get_anti_noise();
+        // anti_noise_R = lms_right.get_anti_noise();
         anti_noise_90_L = lms_left.get_anti_noise_90();
-        anti_noise_90_R = lms_right.get_anti_noise_90();
+        // anti_noise_90_R = lms_right.get_anti_noise_90();
         
         // 4. INTERLEAVE AND WRITE to the appropriate output buffers
         
         // Buffer 1: Speech Signal (e)
-        speech_out[i * 2 + 0] = (int16_t)constrain(speech_L * gain, -32768.0f, 32767.0f);
-        speech_out[i * 2 + 1] = (int16_t)constrain(speech_R * gain, -32768.0f, 32767.0f);
+        speech_out[i * 2 + 0] = (int32_t)constrain(speech_L * gain, -32768.0f, 32767.0f);
+        //speech_out[i * 2 + 1] = (int32_t)constrain(speech_R * gain, -32768.0f, 32767.0f);
 
         // Buffer 2: Anti-Noise Signal (-y_hat)
-        anti_noise_out[i * 2 + 0] = (int16_t)constrain(anti_noise_L * gain, -32768.0f, 32767.0f);
-        anti_noise_out[i * 2 + 1] = (int16_t)constrain(anti_noise_R * gain, -32768.0f, 32767.0f);
+        anti_noise_out[i * 2 + 0] = (int32_t)constrain(anti_noise_L * gain, -32768.0f, 32767.0f);
+        //anti_noise_out[i * 2 + 1] = (int32_t)constrain(anti_noise_R * gain, -32768.0f, 32767.0f);
 
         // Buffer 3: Shifted Anti-Noise Signal
-        anti_noise_90_out[i * 2 + 0] = (int16_t)constrain(anti_noise_90_L * gain, -32768.0f, 32767.0f);
-        anti_noise_90_out[i * 2 + 1] = (int16_t)constrain(anti_noise_90_R * gain, -32768.0f, 32767.0f);
+        anti_noise_90_out[i * 2 + 0] = (int32_t)constrain(anti_noise_90_L * gain, -32768.0f, 32767.0f);
+        //anti_noise_90_out[i * 2 + 1] = (int32_t)constrain(anti_noise_90_R * gain, -32768.0f, 32767.0f);
     }
+    //Serial.println("DSP Bridge Process Complete.");
 }

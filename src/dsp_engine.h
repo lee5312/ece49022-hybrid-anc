@@ -31,6 +31,10 @@ private:
     int32_t anti_noise_buffer[AUDIO_BLOCK * AUDIO_CHANNELS_OUT];
     int32_t anti_noise_90_buffer[AUDIO_BLOCK * AUDIO_CHANNELS_OUT];
 
+    int32_t test_input_buffer[AUDIO_BLOCK * AUDIO_CHANNELS_IN]; // Buffer for the fake signal
+    float test_input_phase;       // Current phase of the sine wave
+    float test_input_increment;   // How much to advance the phase each sample
+
     // Optional internal working buffer (float is better for DSP)
     float cal_L[AUDIO_BLOCK];
     float fb_L[AUDIO_BLOCK];
