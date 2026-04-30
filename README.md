@@ -1,138 +1,102 @@
-# Spatially Aware Hybrid Active Noise Cancelling (SAHANC)
+# Spatially Aware Hybrid Active Noise Cancelling
 
-> ECE 49022 Senior Design Project - Spring 2026
+ECE 49022 senior design repository for the integrated `Teensy 4.1` mainboard, satellite UWB boards, and supporting ANC research code.
 
-## 🎯 Project Overview
+## Current Baseline
 
-A hybrid noise cancellation system that combines **analog speed** with **digital adaptability** for industrial environments.
+The active hardware target is no longer the earlier `ESP32 + STM32` split prototype.
+The current repository baseline is:
 
-### The Problem
-- Digital ANC (like AirPods): Too slow for high-frequency noise
-- Traditional Analog ANC: Not adaptive (cancels only fixed, known noise)
+- integrated `Teensy 4.1` mainboard
+- mainboard UWB module plus `Tool / Left / Right` satellite UWB boards
+- SPI IMU on `J_IMU_1`
+- integrated audio ADC/DAC and analog processing blocks on the mainboard
+- PlatformIO-based `teensy41` sensor firmware
 
-### Our Solution
-**Forward-deployed microphone** at the noise source + **UWB/IMU spatial tracking** + **Analog Phase Control** = Real-time adaptive noise cancellation for industrial workers.
+Older `firmware/esp32` and `firmware/stm32` folders are kept only as legacy prototype history.
 
-## 🏗️ System Architecture
+## Source Of Truth
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         SYSTEM OVERVIEW                                  │
-├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│   [Noise Source X]                              [User's Ear]            │
-│         │                                             ▲                  │
-│         ▼                                             │                  │
-│   ┌─────────────┐     ┌─────────────┐     ┌─────────────────┐          │
-│   │   FDM Mic   │────▶│   PCB/DSP   │────▶│ Analog Phase    │          │
-│   │ (at source) │     │  + H-Map    │     │ Control (APC)   │          │
-│   └─────────────┘     └─────────────┘     └─────────────────┘          │
-│                              ▲                      │                    │
-│                              │                      ▼                    │
-│                       ┌─────────────┐     ┌─────────────────┐          │
-│                       │  UWB + IMU  │     │ Calibration Mic │          │
-│                       │  (spatial)  │     │  (feedback)     │          │
-│                       └─────────────┘     └─────────────────┘          │
-│                                                                          │
-└─────────────────────────────────────────────────────────────────────────┘
-```
+The active hardware source of truth is:
 
-### Key Components
+- `docs/specs/ALTIUM_MAINBOARD_COMPLETE_FINAL_FROM_SHEET1_NET_KR.md`
+- `docs/specs/SATELLITE_BOARD_KR.md`
 
-| Component | Function | Transfer Function |
-|-----------|----------|-------------------|
-| FDM (Forward Deployed Mic) | Captures noise X at source | - |
-| H₁ | Noise path through space | Pre-calculated based on UWB/IMU |
-| H₂ | Analog Phase Control circuit | Real-time adjustment |
-| H₃ | External mic to eardrum | Pre-measured, fixed |
-| Calibration Mic | Feedback for H-Map updates | Trigger for recalibration |
+Those documents supersede the older simplified handoff notes and the STM32-oriented PCB handoff document.
 
-## 📁 Repository Structure
+## Repository Structure
 
-```
+```text
 ece49022-hybrid-anc/
-├── docs/                    # Documentation
-│   ├── specs/              # Technical specifications
-│   ├── diagrams/           # Block diagrams, schematics
-│   └── reports/            # Weekly reports, presentations
-├── firmware/               # Embedded code
-│   ├── esp32/             # ESP32 UWB/IMU processing
-│   ├── stm32/             # STM32 DSP/control
-│   └── common/            # Shared libraries
-├── hardware/               # PCB designs
-│   ├── kicad/             # KiCad project files
-│   ├── gerbers/           # Manufacturing files
-│   └── bom/               # Bill of materials
-├── software/               # PC/Mobile software
-│   ├── calibration/       # Calibration tools
-│   └── visualization/     # Data visualization
-├── simulations/            # MATLAB/Simulink models
-│   ├── transfer_func/     # H₁, H₂, H₃ models
-│   └── noise_analysis/    # Noise characterization
-└── tests/                  # Test procedures & results
+|- docs/
+|  |- reports/
+|  `- specs/
+|- firmware/
+|  |- teensy41/         # Active Teensy 4.1 sensor firmware
+|  |- esp32/            # Legacy prototype firmware
+|  `- stm32/            # Legacy prototype firmware
+|- hardware/
+|  |- altium/           # Altium/netlist references for the active board
+|  |- bom/
+|  `- kicad/            # Legacy placeholder
+|- software/
+|  |- calibration/
+|  `- visualization/
+|- simulations/
+`- tests/
 ```
 
-## 🛠️ Tech Stack
-
-### Hardware
-- **MCU**: STM32F4 (DSP) + ESP32 (Wireless/UWB)
-- **UWB**: DWM3000 module
-- **IMU**: MPU-6050 / BNO055
-- **Audio**: High-quality MEMS microphones
-- **Analog**: Op-amp based phase control circuit
-
-### Firmware
-- **Language**: C/C++
-- **RTOS**: FreeRTOS
-- **Build**: PlatformIO / STM32CubeIDE
-
-### Software
-- **Calibration**: Python
-- **Simulation**: MATLAB/Simulink
-
-## 👥 Team
-
-| Name | Role | Subsystem |
-|------|------|-----------|
-| TBD | Team Lead | Integration |
-| TBD | Hardware | PCB Design |
-| TBD | Firmware | Embedded Systems |
-| TBD | DSP | Signal Processing |
-| TBD | Sensors | UWB/IMU Integration |
-
-## 📅 Timeline
-
-- **Week 1-4**: Conceptual Design & Component Selection
-- **Week 5-8**: Schematic Design & Simulation
-- **Week 9-12**: PCB Fabrication & Firmware Development
-- **Week 13-16**: Integration & Testing
-- **Week 17**: Final Demonstration
-
-## 🚀 Getting Started
+## Active Firmware Build
 
 ```bash
-# Clone the repository
-git clone https://github.com/lee5312/ece49022-hybrid-anc.git
-
-# Install PlatformIO (for firmware development)
-pip install platformio
-
-# Build firmware
-cd firmware/esp32
-pio build
+cd firmware/teensy41
+pio run -e teensy41_full_fusion
 ```
 
-## 📄 Documentation
+Available Teensy environments:
+
+- `teensy41_imu_only`
+- `teensy41_uwb_detect`
+- `teensy41_single_range`
+- `teensy41_full_range`
+- `teensy41_full_fusion`
+
+## Visualization
+
+```bash
+pip install -r software/visualization/requirements.txt
+python software/visualization/visualizer.py
+```
+
+The current Teensy firmware emits bench telemetry such as `$POSE`, `$UWBTS`, `$UWBDBG`, and `$STAT`.
+
+## Documentation
 
 - [Technical Specification](docs/specs/TECHNICAL_SPEC.md)
-- [Hardware Design Guide](docs/specs/HARDWARE_SPEC.md)
-- [Firmware Architecture](docs/specs/FIRMWARE_SPEC.md)
-- [Calibration Procedure](docs/specs/CALIBRATION.md)
+- [Hardware Specification](docs/specs/HARDWARE_SPEC.md)
+- [Firmware Specification](docs/specs/FIRMWARE_SPEC.md)
+- [Calibration Plan](docs/specs/CALIBRATION.md)
+- [Mainboard Netlist Reference](docs/specs/ALTIUM_MAINBOARD_COMPLETE_FINAL_FROM_SHEET1_NET_KR.md)
+- [Satellite Board Reference](docs/specs/SATELLITE_BOARD_KR.md)
+- [Legacy STM32 PCB Handoff](docs/specs/PCB_HANDOFF_STM32.md)
 
-## 📜 License
+## Current Status
 
-This project is for educational purposes as part of Purdue ECE 49022.
+Implemented and build-verified:
 
----
+- Teensy 4.1 UWB bring-up and ranging stages
+- IMU sampling and ESKF fusion scaffolding
+- serial telemetry for bench validation
+- repository-side documentation updates for the integrated board
 
-*Last updated: February 2026*
+Still pending for full deployment:
+
+- measured `IMU_R_HI`
+- per-module UWB antenna delay calibration
+- measured tool world pose for each test setup
+- final firmware mapping for the integrated audio codec/analog path
+
+## Notes
+
+- `simulations/` and `dsp_sub/` contain ongoing ANC modeling work and are not yet a complete deployable audio stack.
+- The integrated mainboard contains substantially more audio hardware than the earlier simplified sensor-only documentation implied.
