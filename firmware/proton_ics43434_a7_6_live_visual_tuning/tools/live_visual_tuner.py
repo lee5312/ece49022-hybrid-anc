@@ -25,8 +25,11 @@ class LiveTuner:
     def __init__(self, root, port, baud, decimation):
         self.root = root
         self.port = port
+        self.baud = baud
         self.decimation = decimation
-        self.serial = serial.Serial(port, baud, timeout=0.05, write_timeout=0.2)
+        self.serial = None
+        self.serial_lock = threading.Lock()
+        self.connected = False
         self.queue = queue.Queue()
         self.running = True
         self.samples = deque(maxlen=900)
@@ -54,9 +57,6 @@ class LiveTuner:
 
         self.reader = threading.Thread(target=self.read_loop, daemon=True)
         self.reader.start()
-        self.send(f"speaker viz on {decimation}")
-        self.send("speaker params")
-        self.send("speaker status")
 
         self.root.after(25, self.tick)
 
@@ -139,10 +139,51 @@ class LiveTuner:
         self.log.see("end")
 
     def send(self, command):
+        with self.serial_lock:
+            port = self.serial
+            if port is None or not port.is_open:
+                self.queue.put(("log", f"not connected, skipped: {command}"))
+                return
+            try:
+                port.write((command + "\r\n").encode("ascii"))
+            except (serial.SerialException, OSError) as exc:
+                self.queue.put(("log", f"serial write failed: {exc}"))
+                self.close_serial_locked()
+
+    def send_locked(self, command):
+        if self.serial is None or not self.serial.is_open:
+            return
         try:
             self.serial.write((command + "\r\n").encode("ascii"))
-        except serial.SerialException as exc:
-            self.log_line(f"serial write failed: {exc}")
+        except (serial.SerialException, OSError) as exc:
+            self.queue.put(("log", f"serial write failed: {exc}"))
+            self.close_serial_locked()
+
+    def close_serial_locked(self):
+        if self.serial is not None:
+            try:
+                self.serial.close()
+            except serial.SerialException:
+                pass
+        self.serial = None
+        self.connected = False
+
+    def open_serial(self):
+        with self.serial_lock:
+            if self.serial is not None and self.serial.is_open:
+                return True
+            try:
+                self.serial = serial.Serial(self.port, self.baud, timeout=0.05, write_timeout=0.2)
+                self.connected = True
+                self.queue.put(("log", f"connected {self.port}"))
+                self.send_locked(f"speaker viz on {self.decimation}")
+                self.send_locked("speaker params")
+                self.send_locked("speaker status")
+                return True
+            except (serial.SerialException, OSError) as exc:
+                self.close_serial_locked()
+                self.queue.put(("log", f"waiting for {self.port}: {exc}"))
+                return False
 
     def schedule_param(self, command, value):
         if command in self.pending:
@@ -157,11 +198,22 @@ class LiveTuner:
 
     def read_loop(self):
         while self.running:
+            if not self.open_serial():
+                time.sleep(1.0)
+                continue
             try:
-                raw = self.serial.readline()
-            except serial.SerialException as exc:
-                self.queue.put(("log", f"serial read failed: {exc}"))
-                return
+                with self.serial_lock:
+                    port = self.serial
+                if port is None:
+                    time.sleep(0.2)
+                    continue
+                raw = port.readline()
+            except (serial.SerialException, OSError) as exc:
+                self.queue.put(("log", f"serial read failed; reconnecting: {exc}"))
+                with self.serial_lock:
+                    self.close_serial_locked()
+                time.sleep(0.5)
+                continue
             if not raw:
                 continue
             line = raw.decode("ascii", errors="ignore").strip()
@@ -278,19 +330,17 @@ class LiveTuner:
         self.draw_meter(self.output_canvas, 12, out_h - 24, "out_env", self.last_stats["out_env"], "#22c55e")
         stale = time.time() - self.last_sample_time
         self.status.set(
-            f"port={self.port} seq={self.last_stats['seq']} "
+            f"port={self.port} {'connected' if self.connected else 'reconnecting'} seq={self.last_stats['seq']} "
             f"updates={self.last_stats['updates']} bins={self.last_stats['bins']} "
             f"last_sample={stale:.1f}s ago"
         )
 
     def close(self):
         self.running = False
-        try:
-            self.send("speaker viz off")
-            time.sleep(0.05)
-            self.serial.close()
-        except serial.SerialException:
-            pass
+        self.send("speaker viz off")
+        time.sleep(0.05)
+        with self.serial_lock:
+            self.close_serial_locked()
         self.root.destroy()
 
 
@@ -298,7 +348,7 @@ def main():
     parser = argparse.ArgumentParser(description="Live visualizer and slider tuner for Plan A_7_6.")
     parser.add_argument("--port", default="COM4")
     parser.add_argument("--baud", type=int, default=115200)
-    parser.add_argument("--decim", type=int, default=16)
+    parser.add_argument("--decim", type=int, default=64)
     args = parser.parse_args()
 
     root = tk.Tk()
